@@ -6,6 +6,8 @@ import android.util.Log
 import com.getcapacitor.JSArray
 import com.getcapacitor.JSObject
 import com.miteksystems.misnap.core.Barcode
+import com.miteksystems.misnap.core.LicenseStatus
+import com.miteksystems.misnap.core.LicenseUtil
 import com.miteksystems.misnap.core.MiSnapSettings
 import com.miteksystems.misnap.core.MrzData
 import com.miteksystems.misnap.core.Mrz1Line
@@ -29,6 +31,24 @@ class MitekSdk(private val context: Context) {
         const val ERR_VOICE_ERROR       = "VOICE_ERROR"
         const val ERR_SETTINGS_ERROR    = "SETTINGS_ERROR"
         const val ERR_UNKNOWN           = "UNKNOWN_ERROR"
+    }
+
+    fun validateLicense(license: String, feature: String? = null): String? {
+        return try {
+            when (val status = LicenseUtil.checkLicenseStatus(license, feature)) {
+                LicenseStatus.VALID    -> null
+                LicenseStatus.EXPIRED  -> null
+                LicenseStatus.FEATURE_NOT_SUPPORTED ->
+                    if (feature != null) "License does not include the '$feature' feature" else null
+                LicenseStatus.NOT_VALID              -> "License failed validation"
+                LicenseStatus.NOT_VALID_APP_ID       -> "License is not valid for this application ID"
+                LicenseStatus.PLATFORM_NOT_SUPPORTED -> "License does not support this platform"
+                LicenseStatus.DISABLED               -> "License is disabled — contact Mitek to renew"
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "validateLicense", e)
+            "License check failed: ${e.message}"
+        }
     }
 
     fun buildDocumentStep(license: String, useCase: MiSnapSettings.UseCase): MiSnapWorkflowStep {

@@ -4,6 +4,8 @@ import type {
   BarcodeSessionOptions,
   DocumentSessionOptions,
   FaceSessionOptions,
+  LicenseValidationOptions,
+  LicenseValidationResult,
   MitekPermissionType,
   MitekSdkPlugin,
   NfcSessionOptions,
@@ -13,6 +15,10 @@ import type {
 } from './definitions';
 
 export class MitekSdkWeb extends WebPlugin implements MitekSdkPlugin {
+  async validateLicense(_options: LicenseValidationOptions): Promise<LicenseValidationResult> {
+    throw this.unimplemented('validateLicense is not available on web.');
+  }
+
   async startDocumentSession(_options: DocumentSessionOptions): Promise<SessionResult> {
     throw this.unimplemented('startDocumentSession is not available on web.');
   }

@@ -53,6 +53,7 @@ class MitekSdkPlugin : Plugin() {
             call.reject("'license' is required", MitekSdk.ERR_LICENSE_MISSING)
             return
         }
+        sdk.validateLicense(license)?.let { call.reject(it, MitekSdk.ERR_LICENSE_INVALID); return }
         val useCase = resolveDocumentUseCase(call.getString(KEY_DOC_TYPE))
         if (useCase == null) {
             call.reject("Unknown documentType. Valid: PASSPORT, ID_FRONT, ID_BACK, CHECK_FRONT, CHECK_BACK, GENERIC_DOCUMENT", MitekSdk.ERR_SETTINGS_ERROR)
@@ -72,6 +73,7 @@ class MitekSdkPlugin : Plugin() {
             call.reject("'license' is required", MitekSdk.ERR_LICENSE_MISSING)
             return
         }
+        sdk.validateLicense(license)?.let { call.reject(it, MitekSdk.ERR_LICENSE_INVALID); return }
         if (getPermissionState("camera") != PermissionState.GRANTED) {
             requestPermissionForAlias("camera", call, "onCameraPermission")
             return
@@ -86,6 +88,7 @@ class MitekSdkPlugin : Plugin() {
             call.reject("'license' is required", MitekSdk.ERR_LICENSE_MISSING)
             return
         }
+        sdk.validateLicense(license)?.let { call.reject(it, MitekSdk.ERR_LICENSE_INVALID); return }
         if (getPermissionState("camera") != PermissionState.GRANTED) {
             requestPermissionForAlias("camera", call, "onCameraPermission")
             return
@@ -100,6 +103,7 @@ class MitekSdkPlugin : Plugin() {
             call.reject("'license' is required", MitekSdk.ERR_LICENSE_MISSING)
             return
         }
+        sdk.validateLicense(license, "voice")?.let { call.reject(it, MitekSdk.ERR_LICENSE_INVALID); return }
         if (getPermissionState("audio") != PermissionState.GRANTED) {
             requestPermissionForAlias("audio", call, "onAudioPermission")
             return
@@ -114,11 +118,29 @@ class MitekSdkPlugin : Plugin() {
             call.reject("'license' is required", MitekSdk.ERR_LICENSE_MISSING)
             return
         }
+        sdk.validateLicense(license, "nfc")?.let { call.reject(it, MitekSdk.ERR_LICENSE_INVALID); return }
         if (getPermissionState("nfc") != PermissionState.GRANTED) {
             requestPermissionForAlias("nfc", call, "onNfcPermission")
             return
         }
         launchNfc(call, license)
+    }
+
+    @PluginMethod
+    fun validateLicense(call: PluginCall) {
+        val license = call.getString(KEY_LICENSE)
+        if (license.isNullOrBlank()) {
+            call.reject("'license' is required", MitekSdk.ERR_LICENSE_MISSING)
+            return
+        }
+        val error = sdk.validateLicense(license)
+        val result = JSObject()
+        result.put("isValid", error == null)
+        if (error != null) {
+            result.put("errorCode",    MitekSdk.ERR_LICENSE_INVALID)
+            result.put("errorMessage", error)
+        }
+        call.resolve(result)
     }
 
     @PluginMethod

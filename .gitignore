@@ -1,0 +1,4 @@
+ionic-capacitor-plugin-usage
+node_modules/
+package-lock.json
+dist/

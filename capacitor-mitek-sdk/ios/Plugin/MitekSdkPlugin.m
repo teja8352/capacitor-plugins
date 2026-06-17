@@ -2,6 +2,7 @@
 #import <Capacitor/Capacitor.h>
 
 CAP_PLUGIN(MitekSdkPlugin, "MitekSdk",
+    CAP_PLUGIN_METHOD(validateLicense,      CAPPluginReturnPromise);
     CAP_PLUGIN_METHOD(startDocumentSession, CAPPluginReturnPromise);
     CAP_PLUGIN_METHOD(startFaceSession,     CAPPluginReturnPromise);
     CAP_PLUGIN_METHOD(startBarcodeSession,  CAPPluginReturnPromise);

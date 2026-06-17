@@ -4,6 +4,12 @@ export default {
   input: 'src/index.ts',
   output: [
     {
+      file: 'dist/esm/index.js',
+      format: 'esm',
+      sourcemap: true,
+      inlineDynamicImports: true,
+    },
+    {
       file: 'dist/plugin.cjs.js',
       format: 'cjs',
       sourcemap: true,

@@ -105,7 +105,18 @@ export interface SessionResult {
   errorMessage?: string;
 }
 
+export interface LicenseValidationOptions {
+  license: string;
+}
+
+export interface LicenseValidationResult {
+  isValid: boolean;
+  errorCode?: string;
+  errorMessage?: string;
+}
+
 export interface MitekSdkPlugin {
+  validateLicense(options: LicenseValidationOptions): Promise<LicenseValidationResult>;
   startDocumentSession(options: DocumentSessionOptions): Promise<SessionResult>;
   startFaceSession(options: FaceSessionOptions): Promise<SessionResult>;
   startBarcodeSession(options: BarcodeSessionOptions): Promise<SessionResult>;
