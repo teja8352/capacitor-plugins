@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "target": "ES2017",
+    "module": "ES2015",
+    "lib": ["ES2017", "DOM"],
+    "declaration": true,
+    "outDir": "./dist/esm/",
+    "moduleResolution": "node",
+    "skipLibCheck": true,
+    "emitDeclarationOnly": true,
+    "strict": true,
+    "esModuleInterop": true
+  },
+  "include": ["src"]
+}

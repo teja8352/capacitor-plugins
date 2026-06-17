@@ -1,0 +1,58 @@
+{
+  "name": "capacitor-mitek-sdk",
+  "version": "1.0.0",
+  "description": "Capacitor plugin for Mitek MiSnap SDK",
+  "main": "dist/plugin.cjs.js",
+  "module": "dist/esm/index.js",
+  "types": "dist/esm/index.d.ts",
+  "unpkg": "dist/plugin.js",
+  "exports": {
+    ".": {
+      "import": "./dist/esm/index.js",
+      "require": "./dist/plugin.cjs.js"
+    }
+  },
+  "files": [
+    "android/src/main/",
+    "android/build.gradle",
+    "dist/",
+    "ios/",
+    "capacitor-mitek-sdk.podspec"
+  ],
+  "scripts": {
+    "build": "npm run clean && tsc && rollup -c rollup.config.js",
+    "clean": "rimraf ./dist"
+  },
+  "devDependencies": {
+    "@capacitor/android": "^6.0.0",
+    "@capacitor/core": "^6.0.0",
+    "@capacitor/ios": "^6.0.0",
+    "@rollup/plugin-typescript": "^11.1.5",
+    "rimraf": "^5.0.5",
+    "rollup": "^4.4.0",
+    "typescript": "^5.2.2"
+  },
+  "peerDependencies": {
+    "@capacitor/core": "^6.0.0"
+  },
+  "capacitor": {
+    "ios": {
+      "src": "ios"
+    },
+    "android": {
+      "src": "android"
+    }
+  },
+  "keywords": [
+    "capacitor",
+    "plugin",
+    "mitek",
+    "misnap",
+    "identity",
+    "document",
+    "face",
+    "biometric",
+    "nfc",
+    "kyc"
+  ]
+}

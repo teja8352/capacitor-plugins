@@ -1,0 +1,6 @@
+-keep class com.mitek.capacitor.** { *; }
+-keep class com.miteksystems.misnap.** { *; }
+-keepclassmembers class com.miteksystems.misnap.** { *; }
+-keepattributes RuntimeVisibleAnnotations
+-keepattributes Signature
+-keepattributes *Annotation*
