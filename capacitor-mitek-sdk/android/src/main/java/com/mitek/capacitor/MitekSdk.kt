@@ -5,15 +5,17 @@ import android.util.Base64
 import android.util.Log
 import com.getcapacitor.JSArray
 import com.getcapacitor.JSObject
+import com.miteksystems.misnap.core.Barcode
 import com.miteksystems.misnap.core.MiSnapSettings
 import com.miteksystems.misnap.core.MrzData
+import com.miteksystems.misnap.core.Mrz1Line
 import com.miteksystems.misnap.nfc.MiSnapNfcReader
 import com.miteksystems.misnap.workflow.MiSnapFinalResult
 import com.miteksystems.misnap.workflow.MiSnapWorkflowActivity
 import com.miteksystems.misnap.workflow.MiSnapWorkflowError
 import com.miteksystems.misnap.workflow.MiSnapWorkflowStep
 
-internal class MitekSdk(private val context: Context) {
+class MitekSdk(private val context: Context) {
 
     companion object {
         private const val TAG = "MitekSdk"
@@ -30,23 +32,23 @@ internal class MitekSdk(private val context: Context) {
     }
 
     fun buildDocumentStep(license: String, useCase: MiSnapSettings.UseCase): MiSnapWorkflowStep {
-        Log.d(TAG, "buildDocumentStep useCase=$useCase")
-        return MiSnapWorkflowStep(MiSnapSettings(useCase, license))
+        val settings = MiSnapSettings(useCase, license)
+        return MiSnapWorkflowStep(settings)
     }
 
     fun buildFaceStep(license: String): MiSnapWorkflowStep {
-        Log.d(TAG, "buildFaceStep")
-        return MiSnapWorkflowStep(MiSnapSettings(MiSnapSettings.UseCase.FACE, license))
+        val settings = MiSnapSettings(MiSnapSettings.UseCase.FACE, license)
+        return MiSnapWorkflowStep(settings)
     }
 
     fun buildBarcodeStep(license: String): MiSnapWorkflowStep {
-        Log.d(TAG, "buildBarcodeStep")
-        return MiSnapWorkflowStep(MiSnapSettings(MiSnapSettings.UseCase.BARCODE, license))
+        val settings = MiSnapSettings(MiSnapSettings.UseCase.BARCODE, license)
+        return MiSnapWorkflowStep(settings)
     }
 
     fun buildVoiceStep(license: String): MiSnapWorkflowStep {
-        Log.d(TAG, "buildVoiceStep")
-        return MiSnapWorkflowStep(MiSnapSettings(MiSnapSettings.UseCase.VOICE, license))
+        val settings = MiSnapSettings(MiSnapSettings.UseCase.VOICE, license)
+        return MiSnapWorkflowStep(settings)
     }
 
     fun buildNfcStep(
@@ -60,137 +62,143 @@ internal class MitekSdk(private val context: Context) {
         country: String?,
         documentCode: String?,
     ): MiSnapWorkflowStep {
-        Log.d(TAG, "buildNfcStep")
         val settings = MiSnapSettings(MiSnapSettings.UseCase.NFC, license)
+
         when {
-            !documentNumber.isNullOrBlank() &&
-            !dateOfBirth.isNullOrBlank() &&
-            !dateOfExpiry.isNullOrBlank() &&
-            !country.isNullOrBlank() &&
-            !documentCode.isNullOrBlank() -> {
-                Log.d(TAG, "buildNfcStep: individual credentials")
+            !documentNumber.isNullOrBlank() && !dateOfBirth.isNullOrBlank() && !dateOfExpiry.isNullOrBlank() -> {
                 settings.nfc.mrz = MrzData(
                     documentNumber = documentNumber,
                     dateOfBirth    = dateOfBirth,
                     dateOfExpiry   = dateOfExpiry,
-                    country        = country,
-                    documentCode   = documentCode,
+                    country        = country ?: "",
+                    documentCode   = documentCode ?: "P",
                 )
             }
             !mrzLine1.isNullOrBlank() && !mrzLine2.isNullOrBlank() -> {
-                Log.d(TAG, "buildNfcStep: raw MRZ lines")
-                settings.nfc.mrz = MrzData(
-                    documentNumber = "",
-                    dateOfBirth    = "",
-                    dateOfExpiry   = "",
-                    country        = "",
-                    documentCode   = "",
-                    rawData        = listOfNotNull(mrzLine1, mrzLine2, mrzLine3).joinToString(""),
-                )
+                settings.nfc.mrz = mrzFromLines(mrzLine1, mrzLine2, mrzLine3)
             }
-            else -> Log.d(TAG, "buildNfcStep: no credentials, SDK will prompt user")
         }
+
         return MiSnapWorkflowStep(settings)
     }
 
     fun parseResults(sessionType: String): JSObject {
-        val results = MiSnapWorkflowActivity.Result.results
-        Log.d(TAG, "parseResults sessionType=$sessionType count=${results.size}")
-        if (results.isEmpty()) {
-            return errorResult(sessionType, ERR_UNKNOWN, "No results returned by the SDK")
+        val steps = MiSnapWorkflowActivity.Result.results
+        if (steps.isNullOrEmpty()) {
+            return errorResult(sessionType, ERR_UNKNOWN, "No results from MiSnapWorkflowActivity")
         }
-        return when (val step = results.first()) {
-            is MiSnapWorkflowStep.Result.Success -> {
-                Log.d(TAG, "parseResults: success")
-                parseFinalResult(sessionType, step.result)
-            }
-            is MiSnapWorkflowStep.Result.Error -> {
-                Log.w(TAG, "parseResults: error ${step.errorResult}")
-                parseError(sessionType, step.errorResult.error)
-            }
+        val step = steps.first()
+        return when (step) {
+            is MiSnapWorkflowStep.Result.Success -> parseFinalResult(sessionType, step)
+            is MiSnapWorkflowStep.Result.Error   -> parseError(sessionType, step)
         }
     }
 
-    private fun parseFinalResult(sessionType: String, result: MiSnapFinalResult): JSObject {
-        return when (result) {
-            is MiSnapFinalResult.DocumentSession -> parseDocument(result)
-            is MiSnapFinalResult.FaceSession     -> parseFace(result)
-            is MiSnapFinalResult.BarcodeSession  -> parseBarcode(result)
-            is MiSnapFinalResult.NfcSession      -> parseNfc(result)
-            is MiSnapFinalResult.VoiceSession    -> parseVoice(result)
+    private fun mrzFromLines(line1: String, line2: String, line3: String?): com.miteksystems.misnap.core.Mrz {
+        return if (line2.length >= 26) {
+            val docNum      = line2.substring(0, 9)
+            val nationality = if (line2.length >= 13) line2.substring(10, 13) else ""
+            val dob         = line2.substring(13, 19)
+            val doe         = line2.substring(20, 26)
+            val ctry        = if (line1.length >= 5) line1.substring(2, 5) else ""
+            val dc          = if (line1.isNotEmpty()) line1.substring(0, 1) else "P"
+            val raw         = if (line3 != null) "$line1$line2$line3" else "$line1$line2"
+            MrzData(
+                documentNumber = docNum,
+                dateOfBirth    = dob,
+                dateOfExpiry   = doe,
+                country        = ctry,
+                documentCode   = dc,
+                nationality    = nationality,
+                rawData        = raw,
+            )
+        } else {
+            Mrz1Line(line1)
         }
     }
 
-    private fun parseDocument(result: MiSnapFinalResult.DocumentSession): JSObject {
-        Log.d(TAG, "parseDocument")
+    private fun parseFinalResult(sessionType: String, step: MiSnapWorkflowStep.Result.Success): JSObject {
+        return when (val r = step.result) {
+            is MiSnapFinalResult.DocumentSession -> parseDocument(sessionType, r)
+            is MiSnapFinalResult.FaceSession     -> parseFace(sessionType, r)
+            is MiSnapFinalResult.BarcodeSession  -> parseBarcode(sessionType, r)
+            is MiSnapFinalResult.NfcSession      -> parseNfc(sessionType, r)
+            is MiSnapFinalResult.VoiceSession    -> parseVoice(sessionType, r)
+        }
+    }
+
+    private fun parseDocument(sessionType: String, r: MiSnapFinalResult.DocumentSession): JSObject {
         val obj = JSObject()
-        obj.put("success", true)
-        obj.put("sessionType", "document")
-        obj.put("licenseExpired", result.licenseExpired)
-        obj.put("imageBase64", Base64.encodeToString(result.jpegImage, Base64.NO_WRAP))
+        obj.put("success",        true)
+        obj.put("sessionType",    sessionType)
+        obj.put("imageBase64",    Base64.encodeToString(r.jpegImage, Base64.NO_WRAP))
+        obj.put("classification", r.classification?.documentType?.name)
+        obj.put("rts",            r.rts)
+        obj.put("licenseExpired", r.licenseExpired)
 
-        result.classification?.documentType?.let { type ->
-            obj.put("classification", type.name)
+        val extracted = r.extraction?.extractedData
+        if (extracted != null) {
+            val data = JSObject()
+            data.put("firstName",      extracted.firstName)
+            data.put("surname",        extracted.surname)
+            data.put("sex",            extracted.sex)
+            data.put("dateOfBirth",    extracted.dateOfBirth)
+            data.put("dateOfExpiry",   extracted.dateOfExpiration)
+            data.put("nationality",    extracted.nationality)
+            data.put("country",        extracted.country)
+            data.put("documentNumber", extracted.docNumber)
+            data.put("documentType",   extracted.docType)
+            data.put("optionalData1",  extracted.optionalData1)
+            data.put("optionalData2",  extracted.optionalData2)
+            data.put("rawMrz",         extracted.rawData)
+            obj.put("extractedData", data)
         }
 
-        result.extraction?.extractedData?.let { doc ->
-            val extracted = JSObject()
-            extracted.put("firstName",      doc.firstName)
-            extracted.put("surname",        doc.surname)
-            extracted.put("sex",            doc.sex)
-            extracted.put("dateOfBirth",    doc.dateOfBirth)
-            extracted.put("dateOfExpiry",   doc.dateOfExpiration)
-            extracted.put("nationality",    doc.nationality)
-            extracted.put("country",        doc.country)
-            extracted.put("documentNumber", doc.docNumber)
-            extracted.put("documentType",   doc.docType)
-            extracted.put("optionalData1",  doc.optionalData1)
-            extracted.put("optionalData2",  doc.optionalData2)
-            extracted.put("rawMrz",         doc.rawData)
-            obj.put("extractedData", extracted)
+        val barcode = r.barcode
+        if (barcode != null) {
+            obj.put("barcode", barcodeObject(barcode))
         }
-
-        result.barcode?.let { obj.put("barcode", barcodeObject(it)) }
-        result.rts?.let { obj.put("rts", it) }
 
         return obj
     }
 
-    private fun parseFace(result: MiSnapFinalResult.FaceSession): JSObject {
-        Log.d(TAG, "parseFace")
+    private fun parseFace(sessionType: String, r: MiSnapFinalResult.FaceSession): JSObject {
         val obj = JSObject()
-        obj.put("success", true)
-        obj.put("sessionType", "face")
-        obj.put("licenseExpired", result.licenseExpired)
-        obj.put("imageBase64", Base64.encodeToString(result.jpegImage, Base64.NO_WRAP))
-        result.rts?.let { obj.put("rts", it) }
-        result.aIBasedRts?.let { obj.put("aiBasedRtsBase64", Base64.encodeToString(it, Base64.NO_WRAP)) }
+        obj.put("success",        true)
+        obj.put("sessionType",    sessionType)
+        obj.put("imageBase64",    Base64.encodeToString(r.jpegImage, Base64.NO_WRAP))
+        obj.put("rts",            r.rts)
+        obj.put("licenseExpired", r.licenseExpired)
+        val aiRts = r.aIBasedRts
+        if (aiRts != null) {
+            obj.put("aiBasedRtsBase64", Base64.encodeToString(aiRts, Base64.NO_WRAP))
+        }
         return obj
     }
 
-    private fun parseBarcode(result: MiSnapFinalResult.BarcodeSession): JSObject {
-        Log.d(TAG, "parseBarcode")
+    private fun parseBarcode(sessionType: String, r: MiSnapFinalResult.BarcodeSession): JSObject {
         val obj = JSObject()
-        obj.put("success", true)
-        obj.put("sessionType", "barcode")
-        obj.put("licenseExpired", result.licenseExpired)
-        obj.put("imageBase64", Base64.encodeToString(result.jpegImage, Base64.NO_WRAP))
-        result.barcode?.let { obj.put("barcode", barcodeObject(it)) }
-        result.rts?.let { obj.put("rts", it) }
+        obj.put("success",        true)
+        obj.put("sessionType",    sessionType)
+        obj.put("imageBase64",    Base64.encodeToString(r.jpegImage, Base64.NO_WRAP))
+        obj.put("rts",            r.rts)
+        obj.put("licenseExpired", r.licenseExpired)
+        val barcode = r.barcode
+        if (barcode != null) {
+            obj.put("barcode", barcodeObject(barcode))
+        }
         return obj
     }
 
-    private fun parseNfc(result: MiSnapFinalResult.NfcSession): JSObject {
-        Log.d(TAG, "parseNfc chipType=${result.nfcData::class.simpleName}")
+    private fun parseNfc(sessionType: String, r: MiSnapFinalResult.NfcSession): JSObject {
         val obj = JSObject()
-        obj.put("success", true)
-        obj.put("sessionType", "nfc")
-        obj.put("licenseExpired", result.licenseExpired)
+        obj.put("success",        true)
+        obj.put("sessionType",    sessionType)
+        obj.put("licenseExpired", r.licenseExpired)
 
         val nfc = JSObject()
-        when (val chip = result.nfcData) {
+        when (val chip = r.nfcData) {
             is MiSnapNfcReader.ChipData.Icao -> {
-                Log.d(TAG, "parseNfc: ICAO")
                 nfc.put("chipType",       "ICAO")
                 nfc.put("documentNumber", chip.documentNumber)
                 nfc.put("documentCode",   chip.documentCode)
@@ -204,12 +212,14 @@ internal class MitekSdk(private val context: Context) {
                 nfc.put("dateOfIssue",    chip.dateOfIssue)
                 nfc.put("personalNumber", chip.personalNumber)
                 nfc.put("placeOfBirth",   chip.placeOfBirth)
-                chip.photo?.let { nfc.put("faceImageBase64", Base64.encodeToString(it, Base64.NO_WRAP)) }
-                nfc.put("chipAuthInfo",  chip.authenticationData.chipAuthInfo)
-                nfc.put("activeAuthInfo", chip.authenticationData.activeAuthInfo?.toString())
+                nfc.put("chipAuthInfo",   chip.authenticationData.chipAuthInfo)
+                nfc.put("activeAuthInfo", chip.authenticationData.activeAuthInfo)
+                val photo = chip.photo
+                if (photo != null) {
+                    nfc.put("faceImageBase64", Base64.encodeToString(photo, Base64.NO_WRAP))
+                }
             }
             is MiSnapNfcReader.ChipData.EuDl -> {
-                Log.d(TAG, "parseNfc: EU_DL")
                 nfc.put("chipType",                  "EU_DL")
                 nfc.put("documentNumber",            chip.documentNumber)
                 nfc.put("documentCode",              chip.documentCode)
@@ -224,62 +234,67 @@ internal class MitekSdk(private val context: Context) {
                 nfc.put("personalNumber",            chip.personalNumber)
                 nfc.put("placeOfBirth",              chip.placeOfBirth)
                 nfc.put("permanentPlaceOfResidence", chip.permanentPlaceOfResidence)
-                chip.photo?.let { nfc.put("faceImageBase64", Base64.encodeToString(it, Base64.NO_WRAP)) }
-                chip.vehicleCategories?.let { categories ->
+                nfc.put("chipAuthInfo",              chip.authenticationData.chipAuthInfo)
+                nfc.put("activeAuthInfo",            chip.authenticationData.activeAuthInfo)
+                val photo = chip.photo
+                if (photo != null) {
+                    nfc.put("faceImageBase64", Base64.encodeToString(photo, Base64.NO_WRAP))
+                }
+                val cats = chip.vehicleCategories
+                if (!cats.isNullOrEmpty()) {
                     val arr = JSArray()
-                    categories.forEach { arr.put(it.toString()) }
+                    cats.forEach { arr.put(it) }
                     nfc.put("vehicleCategories", arr)
                 }
-                nfc.put("chipAuthInfo",  chip.authenticationData.chipAuthInfo)
-                nfc.put("activeAuthInfo", chip.authenticationData.activeAuthInfo?.toString())
             }
         }
         obj.put("nfcData", nfc)
         return obj
     }
 
-    private fun parseVoice(result: MiSnapFinalResult.VoiceSession): JSObject {
-        Log.d(TAG, "parseVoice samples=${result.voiceSamples.size}")
+    private fun parseVoice(sessionType: String, r: MiSnapFinalResult.VoiceSession): JSObject {
         val obj = JSObject()
-        obj.put("success", true)
-        obj.put("sessionType", "voice")
-        obj.put("licenseExpired", result.licenseExpired)
-        obj.put("phrase", result.phrase)
-        obj.put("voiceSampleCount", result.voiceSamples.size)
+        obj.put("success",          true)
+        obj.put("sessionType",      sessionType)
+        obj.put("voiceSampleCount", r.voiceSamples.size)
+        obj.put("phrase",           r.phrase)
+        obj.put("licenseExpired",   r.licenseExpired)
+        val firstRts = r.rts.firstOrNull { it != null }
+        if (firstRts != null) {
+            obj.put("rts", firstRts)
+        }
         return obj
     }
 
-    private fun parseError(sessionType: String, error: MiSnapWorkflowError): JSObject {
-        val (code, message) = when (error) {
-            is MiSnapWorkflowError.Cancelled                  -> ERR_SESSION_CANCELLED to "Session cancelled by user"
-            is MiSnapWorkflowError.Camera                     -> ERR_CAMERA_ERROR      to "Camera error"
-            is MiSnapWorkflowError.License                    -> ERR_LICENSE_INVALID   to "License error: ${error.reason}"
-            is MiSnapWorkflowError.Analysis                   -> ERR_ANALYSIS_ERROR    to "Frame analysis failed"
-            is MiSnapWorkflowError.Permission                 -> ERR_PERMISSION_DENIED to "Required permission not granted"
-            is MiSnapWorkflowError.SettingState               -> ERR_SETTINGS_ERROR    to "Invalid SDK settings"
-            is MiSnapWorkflowError.Nfc                        -> ERR_NFC_ERROR         to "NFC read failed"
-            is MiSnapWorkflowError.Voice                      -> ERR_VOICE_ERROR       to "Voice recording failed"
-            is MiSnapWorkflowError.CombinedWorkflow           -> ERR_SETTINGS_ERROR    to "Invalid combined workflow"
-            is MiSnapWorkflowError.CombinedWorkflowSkippedStep -> ERR_UNKNOWN          to "Workflow step skipped"
-            else                                              -> ERR_UNKNOWN           to "Unexpected error: ${error::class.simpleName}"
+    private fun parseError(sessionType: String, step: MiSnapWorkflowStep.Result.Error): JSObject {
+        val code = when (step.errorResult.error) {
+            is MiSnapWorkflowError.Cancelled    -> ERR_SESSION_CANCELLED
+            is MiSnapWorkflowError.Camera       -> ERR_CAMERA_ERROR
+            is MiSnapWorkflowError.Analysis     -> ERR_ANALYSIS_ERROR
+            is MiSnapWorkflowError.Nfc          -> ERR_NFC_ERROR
+            is MiSnapWorkflowError.Voice        -> ERR_VOICE_ERROR
+            is MiSnapWorkflowError.SettingState -> ERR_SETTINGS_ERROR
+            is MiSnapWorkflowError.License      -> ERR_LICENSE_INVALID
+            is MiSnapWorkflowError.Permission   -> ERR_PERMISSION_DENIED
+            else                                -> ERR_UNKNOWN
         }
-        Log.w(TAG, "parseError [$code] $message")
-        return errorResult(sessionType, code, message)
+        return errorResult(sessionType, code, step.errorResult.error.toString())
     }
 
-    private fun barcodeObject(barcode: com.miteksystems.misnap.core.Barcode): JSObject {
-        val js = JSObject()
-        js.put("encodedBarcode", barcode.encodedBarcode)
-        js.put("type", barcode.type?.name)
-        js.put("isVds", barcode.isVds)
-        return js
+    private fun barcodeObject(barcode: Barcode): JSObject {
+        val obj = JSObject()
+        obj.put("encodedBarcode", barcode.encodedBarcode)
+        obj.put("type",           barcode.type?.name)
+        obj.put("isVds",          barcode.isVds)
+        return obj
     }
 
     private fun errorResult(sessionType: String, code: String, message: String): JSObject {
+        Log.w(TAG, "session=$sessionType code=$code msg=$message")
         val obj = JSObject()
-        obj.put("success", false)
-        obj.put("sessionType", sessionType)
-        obj.put("errorCode", code)
+        obj.put("success",      false)
+        obj.put("sessionType",  sessionType)
+        obj.put("errorCode",    code)
         obj.put("errorMessage", message)
         return obj
     }

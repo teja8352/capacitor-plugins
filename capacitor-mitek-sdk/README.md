@@ -1,11 +1,12 @@
 # capacitor-mitek-sdk
 
-Capacitor plugin for the **Mitek MiSnap SDK** (v5.11.1).  
-Supports identity document capture, biometric face capture, barcode scanning, NFC chip reading, and voice verification in **Ionic + Angular + Capacitor** applications.
+Capacitor plugin wrapping the **[Mitek MiSnap Android SDK](https://github.com/Mitek-Systems/MiSnap-Android)** (v5.11.1).
+
+The plugin does not reimplement any capture logic. It configures and launches `MiSnapWorkflowActivity` from the MiSnap SDK, reads the results it returns, and bridges them to JavaScript via Capacitor.
 
 | Platform | Support |
 |----------|---------|
-| Android  | ✅ Full implementation |
+| Android  | ✅ Full — delegates to MiSnapWorkflowActivity |
 | iOS      | 🚧 Stub — implementation coming |
 | Web      | ❌ Native SDK only |
 
@@ -14,21 +15,22 @@ Supports identity document capture, biometric face capture, barcode scanning, NF
 ## Table of Contents
 
 1. [Requirements](#requirements)
-2. [Project Integration](#project-integration)
-3. [Android Setup](#android-setup)
-4. [iOS Setup](#ios-setup)
-5. [Angular Service Setup](#angular-service-setup)
-6. [Session Usage](#session-usage)
+2. [How it works](#how-it-works)
+3. [Project Integration](#project-integration)
+4. [Android Setup](#android-setup)
+5. [iOS Setup](#ios-setup)
+6. [Angular Service](#angular-service)
+7. [Session Usage](#session-usage)
    - [Document Capture](#document-capture)
    - [Face Capture](#face-capture)
    - [Barcode Scan](#barcode-scan)
    - [Voice Capture](#voice-capture)
    - [NFC Reading](#nfc-reading)
-7. [Permission Handling](#permission-handling)
-8. [Full KYC Flow Example](#full-kyc-flow-example)
-9. [API Reference](#api-reference)
-10. [Error Codes](#error-codes)
-11. [Troubleshooting](#troubleshooting)
+8. [Permission Handling](#permission-handling)
+9. [Full KYC Flow Example](#full-kyc-flow-example)
+10. [API Reference](#api-reference)
+11. [Error Codes](#error-codes)
+12. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -51,14 +53,39 @@ Supports identity document capture, biometric face capture, barcode scanning, NF
 
 ---
 
+## How it works
+
+```
+JavaScript (Ionic/Angular)
+        │
+        │  call.startDocumentSession({ license, documentType })
+        ▼
+MitekSdkPlugin.kt  (Capacitor bridge)
+        │
+        │  builds MiSnapSettings + MiSnapWorkflowStep
+        │  calls startActivityForResult → MiSnapWorkflowActivity
+        ▼
+MiSnapWorkflowActivity  (Mitek SDK — owns all UI, camera, NFC, voice)
+        │
+        │  user completes capture
+        ▼
+MitekSdk.kt  (result parser)
+        │
+        │  reads MiSnapWorkflowActivity.Result
+        │  maps sealed MiSnapFinalResult → JSObject
+        ▼
+JavaScript  ← SessionResult
+```
+
+The MiSnap SDK handles everything inside `MiSnapWorkflowActivity`: camera preview, auto-capture, image quality analysis, NFC chip reading, voice recording, and real-time feedback UI. The plugin only passes configuration in and reads results out.
+
+---
+
 ## Project Integration
 
-This plugin lives inside your project under `plugins/capacitor-mitek-sdk`.  
-It is referenced as a local file dependency — no npm registry required.
+This plugin lives inside your project at `plugins/capacitor-mitek-sdk`. It is referenced as a local file dependency — no npm registry needed.
 
-### Step 1 — Reference the plugin in your app's `package.json`
-
-Open the `package.json` at the root of your Ionic project and add the plugin under `dependencies`:
+### Step 1 — Add to your app's `package.json`
 
 ```json
 {
@@ -84,27 +111,26 @@ npm install
 npx cap sync
 ```
 
-`npx cap sync` copies the Android and iOS native code into `android/` and `ios/` and updates the Capacitor bridge.
-
 ---
 
 ## Android Setup
 
-### 1. Add Mitek GitHub Package credentials
+### 1. GitHub credentials for MiSnap SDK
 
-The MiSnap SDK is distributed through **GitHub Packages**.  
-You need a GitHub **Personal Access Token (PAT)** with the `read:packages` scope.
+The MiSnap SDK is distributed via **GitHub Packages** (`maven.pkg.github.com`). GitHub requires a token even for public packages — it is not a Mitek access restriction.
 
-Create or open `android/local.properties` and add:
+Add to `android/local.properties`:
 
 ```properties
 mitek.github.username=YOUR_GITHUB_USERNAME
-mitek.github.token=YOUR_GITHUB_PAT_WITH_READ_PACKAGES_SCOPE
+mitek.github.token=YOUR_GITHUB_PAT
 ```
 
-> **Do not commit `local.properties` to version control.** Add it to `.gitignore` if it is not already there.
+Generate the PAT at **github.com → Settings → Developer settings → Personal access tokens (classic)** with `read:packages` scope. Since the repository is public, any GitHub account works — no special approval from Mitek required.
 
-For CI/CD environments, set environment variables instead:
+> Do not commit `local.properties`. It should already be in `.gitignore`.
+
+For CI/CD, use environment variables instead:
 
 ```bash
 export MITEK_GITHUB_USERNAME="your-username"
@@ -112,8 +138,6 @@ export MITEK_GITHUB_TOKEN="your-pat"
 ```
 
 ### 2. Register the plugin in MainActivity
-
-Open `android/app/src/main/java/<your-package>/MainActivity.kt`:
 
 ```kotlin
 package com.yourcompany.yourapp
@@ -130,38 +154,17 @@ class MainActivity : BridgeActivity() {
 }
 ```
 
-### 3. Verify permissions in your app manifest
+### 3. Obtain a Mitek license key
 
-The plugin's manifest is merged automatically by Gradle. Run a build and confirm these appear in `android/app/build/outputs/merged_manifests/`:
-
-```xml
-<uses-permission android:name="android.permission.CAMERA" />
-<uses-permission android:name="android.permission.VIBRATE" />
-<uses-permission android:name="android.permission.RECORD_AUDIO" />
-<uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
-<uses-permission android:name="android.permission.NFC" />
-```
-
-Remove the audio and NFC permissions from your app-level manifest if you are not using Voice or NFC sessions respectively.
-
-### 4. Obtain a Mitek license key
-
-Contact [Mitek Systems](https://www.miteksystems.com) to obtain a license key.  
-Each key is scoped to your **application ID** (e.g. `com.yourcompany.yourapp`) and the **features** you have licensed (document, face, NFC, barcode, voice).
+Contact [Mitek Systems](https://www.miteksystems.com) for a license key scoped to your app's **applicationId** and the features you need.
 
 ---
 
 ## iOS Setup
 
-The iOS plugin bridge files are in place. All methods currently return an `UNIMPLEMENTED` result until the Mitek iOS SDK is wired up.
+Bridge files are in place. All methods return `UNIMPLEMENTED` until the Mitek iOS SDK is integrated.
 
-When ready to implement iOS:
-
-1. Add the Mitek iOS SDK dependency to `plugins/capacitor-mitek-sdk/capacitor-mitek-sdk.podspec`.
-2. Implement session launchers inside `ios/Plugin/MitekSdk.swift`.
-3. Run `pod install` and `npx cap sync ios`.
-
-Add the following keys to your app's `ios/App/App/Info.plist`:
+Add to `ios/App/App/Info.plist`:
 
 ```xml
 <key>NSCameraUsageDescription</key>
@@ -174,9 +177,7 @@ Add the following keys to your app's `ios/App/App/Info.plist`:
 
 ---
 
-## Angular Service Setup
-
-Generate a dedicated service to wrap all plugin calls:
+## Angular Service
 
 ```bash
 ionic generate service services/mitek
@@ -255,15 +256,11 @@ export class MitekService {
 
 ### Document Capture
 
-Captures a government-issued identity document.
-
-**Supported document types:**
-
 | `documentType` | Description |
 |----------------|-------------|
 | `PASSPORT` | International passport (TD3 MRZ) |
-| `ID_FRONT` | National ID card — front side |
-| `ID_BACK` | National ID card — back side (may include barcode) |
+| `ID_FRONT` | National ID card — front |
+| `ID_BACK` | National ID card — back |
 | `CHECK_FRONT` | Bank cheque — front |
 | `CHECK_BACK` | Bank cheque — back |
 | `GENERIC_DOCUMENT` | Any document |
@@ -271,55 +268,33 @@ Captures a government-issued identity document.
 ```typescript
 import { MitekSdk } from 'capacitor-mitek-sdk';
 
-async captureDocument() {
-  const result = await MitekSdk.startDocumentSession({
-    license: 'YOUR_LICENSE_KEY',
-    documentType: 'PASSPORT',
-  });
+const result = await MitekSdk.startDocumentSession({
+  license: 'YOUR_LICENSE_KEY',
+  documentType: 'PASSPORT',
+});
 
-  if (result.success) {
-    console.log('Image (base64):', result.imageBase64);
-    console.log('Classification:', result.classification);
-    console.log('First name:', result.extractedData?.firstName);
-    console.log('Surname:', result.extractedData?.surname);
-    console.log('Doc number:', result.extractedData?.documentNumber);
-    console.log('DOB:', result.extractedData?.dateOfBirth);
-    console.log('Expiry:', result.extractedData?.dateOfExpiry);
-    console.log('Nationality:', result.extractedData?.nationality);
-    console.log('Raw MRZ:', result.extractedData?.rawMrz);
-  } else {
-    console.error(result.errorCode, result.errorMessage);
-  }
+if (result.success) {
+  console.log(result.imageBase64);
+  console.log(result.extractedData?.surname);
+  console.log(result.extractedData?.documentNumber);
+  console.log(result.extractedData?.dateOfBirth);
+  console.log(result.extractedData?.dateOfExpiry);
+  console.log(result.extractedData?.nationality);
+  console.log(result.extractedData?.rawMrz);
 }
-```
-
-**Display the captured image in your template:**
-
-```html
-<img *ngIf="result?.imageBase64"
-     [src]="'data:image/jpeg;base64,' + result.imageBase64"
-     alt="Captured document" />
 ```
 
 ---
 
 ### Face Capture
 
-Captures a biometric selfie image.
-
 ```typescript
-async captureFace() {
-  const result = await MitekSdk.startFaceSession({
-    license: 'YOUR_LICENSE_KEY',
-  });
+const result = await MitekSdk.startFaceSession({ license: 'YOUR_LICENSE_KEY' });
 
-  if (result.success) {
-    console.log('Face image (base64):', result.imageBase64);
-    console.log('RTS payload:', result.rts);
-    console.log('AI-based RTS:', result.aiBasedRtsBase64);
-  } else {
-    console.error(result.errorCode, result.errorMessage);
-  }
+if (result.success) {
+  console.log(result.imageBase64);
+  console.log(result.rts);
+  console.log(result.aiBasedRtsBase64);
 }
 ```
 
@@ -327,22 +302,13 @@ async captureFace() {
 
 ### Barcode Scan
 
-Scans barcodes including PDF417, QR Code, Aztec, and Visible Digital Seals (VDS).
-
 ```typescript
-async scanBarcode() {
-  const result = await MitekSdk.startBarcodeSession({
-    license: 'YOUR_LICENSE_KEY',
-  });
+const result = await MitekSdk.startBarcodeSession({ license: 'YOUR_LICENSE_KEY' });
 
-  if (result.success) {
-    console.log('Decoded barcode:', result.barcode?.encodedBarcode);
-    console.log('Barcode type:', result.barcode?.type);
-    console.log('Is VDS:', result.barcode?.isVds);
-    console.log('Frame image (base64):', result.imageBase64);
-  } else {
-    console.error(result.errorCode, result.errorMessage);
-  }
+if (result.success) {
+  console.log(result.barcode?.encodedBarcode);
+  console.log(result.barcode?.type);
+  console.log(result.barcode?.isVds);
 }
 ```
 
@@ -350,22 +316,15 @@ async scanBarcode() {
 
 ### Voice Capture
 
-Records the user speaking a phrase for voice-biometric verification.  
-Raw audio is not returned to JavaScript. Use the `rts` payload to submit to the Mitek API for server-side verification.
-
 ```typescript
-async captureVoice() {
-  const result = await MitekSdk.startVoiceSession({
-    license: 'YOUR_LICENSE_KEY',
-    phrase: 'My voice is my password',
-  });
+const result = await MitekSdk.startVoiceSession({
+  license: 'YOUR_LICENSE_KEY',
+  phrase: 'My voice is my password',
+});
 
-  if (result.success) {
-    console.log('Phrase spoken:', result.phrase);
-    console.log('Samples recorded:', result.voiceSampleCount);
-  } else {
-    console.error(result.errorCode, result.errorMessage);
-  }
+if (result.success) {
+  console.log(result.voiceSampleCount);
+  console.log(result.phrase);
 }
 ```
 
@@ -373,52 +332,33 @@ async captureVoice() {
 
 ### NFC Reading
 
-Reads the NFC chip from a passport or EU driving licence.  
-Supply document credentials to skip the SDK's manual-entry screen.
+Supply document credentials so the SDK skips its manual-entry screen.
 
-**Option A — Individual credential fields (recommended):**
-
-Use the values extracted from a prior document session:
+**Option A — From a prior document session (recommended):**
 
 ```typescript
-async readNfcWithDocumentResult(docResult: SessionResult) {
-  const extracted = docResult.extractedData;
+const toYYMMdd = (iso?: string) => iso ? iso.replace(/-/g, '').slice(2) : undefined;
 
-  // Dates must be in YYMMdd format — strip the century digits
-  const toYYMMdd = (isoDate?: string) =>
-    isoDate ? isoDate.replace(/-/g, '').slice(2) : undefined;
+const result = await MitekSdk.startNfcSession({
+  license: 'YOUR_LICENSE_KEY',
+  documentNumber: docResult.extractedData?.documentNumber,
+  dateOfBirth:    toYYMMdd(docResult.extractedData?.dateOfBirth),
+  dateOfExpiry:   toYYMMdd(docResult.extractedData?.dateOfExpiry),
+  country:        docResult.extractedData?.country,
+  documentCode:   docResult.extractedData?.documentType,
+});
 
-  const result = await MitekSdk.startNfcSession({
-    license: 'YOUR_LICENSE_KEY',
-    documentNumber: extracted?.documentNumber,
-    dateOfBirth:    toYYMMdd(extracted?.dateOfBirth),
-    dateOfExpiry:   toYYMMdd(extracted?.dateOfExpiry),
-    country:        extracted?.country,
-    documentCode:   extracted?.documentType,
-  });
-
-  if (result.success) {
-    const chip = result.nfcData;
-    console.log('Chip type:', chip?.chipType);        // "ICAO" or "EU_DL"
-    console.log('Name:', chip?.firstName, chip?.lastName);
-    console.log('Gender:', chip?.gender);
-    console.log('Issuing country:', chip?.issuingCountry);
-    console.log('Date of birth:', chip?.dateOfBirth);
-    console.log('Date of expiry:', chip?.dateOfExpiry);
-    console.log('Date of issue:', chip?.dateOfIssue);
-    console.log('Personal number:', chip?.personalNumber);
-    console.log('Place of birth:', chip?.placeOfBirth);
-    console.log('Chip auth:', chip?.chipAuthInfo);
-    console.log('Active auth:', chip?.activeAuthInfo);
-    console.log('Face image:', chip?.faceImageBase64?.substring(0, 20) + '…');
-
-    // EU Driving Licence only
-    if (chip?.chipType === 'EU_DL') {
-      console.log('Vehicle categories:', chip.vehicleCategories);
-      console.log('Residence:', chip.permanentPlaceOfResidence);
-    }
-  } else {
-    console.error(result.errorCode, result.errorMessage);
+if (result.success) {
+  const chip = result.nfcData;
+  console.log(chip?.chipType);       // "ICAO" or "EU_DL"
+  console.log(chip?.firstName, chip?.lastName);
+  console.log(chip?.gender);
+  console.log(chip?.issuingCountry);
+  console.log(chip?.chipAuthInfo);
+  console.log(chip?.faceImageBase64);
+  if (chip?.chipType === 'EU_DL') {
+    console.log(chip.vehicleCategories);
+    console.log(chip.permanentPlaceOfResidence);
   }
 }
 ```
@@ -436,73 +376,30 @@ const result = await MitekSdk.startNfcSession({
 **Option C — Let the SDK prompt the user:**
 
 ```typescript
-const result = await MitekSdk.startNfcSession({
-  license: 'YOUR_LICENSE_KEY',
-});
+const result = await MitekSdk.startNfcSession({ license: 'YOUR_LICENSE_KEY' });
 ```
 
 ---
 
 ## Permission Handling
 
-The plugin requests permissions automatically before launching each session.  
-You can also check and request permissions manually before showing any capture UI.
-
-### Check current permission state
+The plugin requests permissions automatically before each session. You can also check and request them manually.
 
 ```typescript
-import { MitekSdk } from 'capacitor-mitek-sdk';
-
 const status = await MitekSdk.checkPermissions();
-console.log(status.camera);  // "granted" | "denied" | "prompt"
-console.log(status.audio);
-console.log(status.nfc);
-```
+// status.camera / status.audio / status.nfc → "granted" | "denied" | "prompt"
 
-### Request specific permissions
-
-```typescript
-// Request only camera
-const status = await MitekSdk.requestPermissions({ permissions: ['camera'] });
-
-// Request camera and audio
-const status = await MitekSdk.requestPermissions({ permissions: ['camera', 'audio'] });
-
-// Request all permissions at once
-const status = await MitekSdk.requestPermissions();
-```
-
-### Guard a session with a permission pre-check
-
-```typescript
-async startDocumentCapture() {
-  const perms = await MitekSdk.checkPermissions();
-
-  if (perms.camera !== 'granted') {
-    const requested = await MitekSdk.requestPermissions({ permissions: ['camera'] });
-    if (requested.camera !== 'granted') {
-      this.showToast('Camera permission is required to capture documents.', 'warning');
-      return;
-    }
-  }
-
-  const result = await MitekSdk.startDocumentSession({
-    license: 'YOUR_LICENSE_KEY',
-    documentType: 'PASSPORT',
-  });
-  // handle result
-}
+const updated = await MitekSdk.requestPermissions({ permissions: ['camera'] });
+const all     = await MitekSdk.requestPermissions(); // requests camera + audio + nfc
 ```
 
 ---
 
 ## Full KYC Flow Example
 
-A complete end-to-end KYC flow: passport capture → face capture → NFC reading.
+Passport capture → face capture → NFC reading using Angular 17+ signals and Ionic 8 standalone components.
 
-### Angular Component
-
-Uses Angular 17+ signals and `inject()`, Ionic 8 standalone imports.
+### `kyc.page.ts`
 
 ```typescript
 import { Component, signal, inject } from '@angular/core';
@@ -529,14 +426,14 @@ import type { SessionResult } from 'capacitor-mitek-sdk';
 })
 export class KycPage {
 
-  private readonly mitek = inject(MitekService);
-  private readonly loadingCtrl = inject(LoadingController);
-  private readonly toastCtrl = inject(ToastController);
+  private readonly mitek        = inject(MitekService);
+  private readonly loadingCtrl  = inject(LoadingController);
+  private readonly toastCtrl    = inject(ToastController);
 
   documentResult = signal<SessionResult | null>(null);
-  faceResult = signal<SessionResult | null>(null);
-  nfcResult = signal<SessionResult | null>(null);
-  isLoading = signal(false);
+  faceResult     = signal<SessionResult | null>(null);
+  nfcResult      = signal<SessionResult | null>(null);
+  isLoading      = signal(false);
 
   constructor() {
     addIcons({ shieldCheckmarkOutline });
@@ -552,7 +449,7 @@ export class KycPage {
       if (perms.camera !== 'granted') {
         const req = await this.mitek.requestPermissions(['camera']);
         if (req.camera !== 'granted') {
-          await this.toast('Camera permission is required.', 'warning');
+          await this.showToast('Camera permission is required.', 'warning');
           return;
         }
       }
@@ -561,23 +458,23 @@ export class KycPage {
       const doc = await this.mitek.capturePassport();
       if (!doc.success) {
         if (doc.errorCode !== 'SESSION_CANCELLED') {
-          await this.toast('Document capture failed: ' + doc.errorMessage, 'danger');
+          await this.showToast('Document capture failed: ' + doc.errorMessage, 'danger');
         }
         return;
       }
       this.documentResult.set(doc);
-      await this.toast('Passport captured.');
+      await this.showToast('Passport captured.');
 
       loader.message = 'Look directly at the camera…';
       const face = await this.mitek.captureFace();
       if (!face.success) {
         if (face.errorCode !== 'SESSION_CANCELLED') {
-          await this.toast('Face capture failed: ' + face.errorMessage, 'danger');
+          await this.showToast('Face capture failed: ' + face.errorMessage, 'danger');
         }
         return;
       }
       this.faceResult.set(face);
-      await this.toast('Face captured.');
+      await this.showToast('Face captured.');
 
       loader.message = 'Hold your passport near the top of the phone…';
       const toYYMMdd = (iso?: string) => iso ? iso.replace(/-/g, '').slice(2) : undefined;
@@ -588,41 +485,30 @@ export class KycPage {
         country:        doc.extractedData?.country,
         documentCode:   doc.extractedData?.documentType,
       });
-      if (!nfc.success && nfc.errorCode !== 'SESSION_CANCELLED') {
-        await this.toast('NFC reading failed: ' + nfc.errorMessage, 'warning');
-      }
       this.nfcResult.set(nfc.success ? nfc : null);
+      if (!nfc.success && nfc.errorCode !== 'SESSION_CANCELLED') {
+        await this.showToast('NFC reading failed: ' + nfc.errorMessage, 'warning');
+      }
 
-      await this.toast('KYC capture complete. Submitting…', 'success');
-      await this.submitToServer(doc, face, nfc);
+      await this.showToast('KYC complete.', 'success');
 
     } catch (err) {
-      console.error('[KycPage] unexpected error', err);
-      await this.toast('An unexpected error occurred.', 'danger');
+      console.error('[KycPage]', err);
+      await this.showToast('An unexpected error occurred.', 'danger');
     } finally {
       this.isLoading.set(false);
       await loader.dismiss();
     }
   }
 
-  private async submitToServer(doc: SessionResult, face: SessionResult, nfc: SessionResult) {
-    console.log('[KycPage] submitting to server:', {
-      documentImage: doc.imageBase64?.substring(0, 20) + '…',
-      faceImage: face.imageBase64?.substring(0, 20) + '…',
-      nfcChipType: nfc.nfcData?.chipType,
-    });
-  }
-
-  private async toast(message: string, color = 'primary') {
+  private async showToast(message: string, color = 'primary') {
     const t = await this.toastCtrl.create({ message, duration: 3000, color });
     await t.present();
   }
 }
 ```
 
-### Angular Template
-
-Uses Angular 17+ `@if` / `@for` control flow (no `*ngIf` / `*ngFor` directives needed).
+### `kyc.page.html`
 
 ```html
 <ion-header>
@@ -648,10 +534,9 @@ Uses Angular 17+ `@if` / `@for` control flow (no `*ngIf` / `*ngFor` directives n
         <img [src]="'data:image/jpeg;base64,' + documentResult()?.imageBase64"
              style="max-width:100%; border-radius:8px;" />
         <p><strong>Name:</strong> {{ documentResult()?.extractedData?.firstName }} {{ documentResult()?.extractedData?.surname }}</p>
-        <p><strong>Document #:</strong> {{ documentResult()?.extractedData?.documentNumber }}</p>
-        <p><strong>DOB:</strong> {{ documentResult()?.extractedData?.dateOfBirth }}</p>
-        <p><strong>Expiry:</strong> {{ documentResult()?.extractedData?.dateOfExpiry }}</p>
-        <p><strong>Nationality:</strong> {{ documentResult()?.extractedData?.nationality }}</p>
+        <p><strong>Doc #:</strong> {{ documentResult()?.extractedData?.documentNumber }}</p>
+        <p><strong>DOB:</strong>   {{ documentResult()?.extractedData?.dateOfBirth }}</p>
+        <p><strong>Expiry:</strong>{{ documentResult()?.extractedData?.dateOfExpiry }}</p>
       </ion-card-content>
     </ion-card>
   }
@@ -671,17 +556,16 @@ Uses Angular 17+ `@if` / `@for` control flow (no `*ngIf` / `*ngFor` directives n
   @if (nfcResult()?.success) {
     <ion-card>
       <ion-card-header>
-        <ion-card-title>NFC Chip — {{ nfcResult()?.nfcData?.chipType }}</ion-card-title>
+        <ion-card-title>NFC — {{ nfcResult()?.nfcData?.chipType }}</ion-card-title>
       </ion-card-header>
       <ion-card-content>
         @if (nfcResult()?.nfcData?.faceImageBase64) {
           <img [src]="'data:image/jpeg;base64,' + nfcResult()!.nfcData!.faceImageBase64"
                style="max-width:120px; border-radius:50%; display:block; margin:auto 0 12px;" />
         }
-        <p><strong>Name:</strong> {{ nfcResult()?.nfcData?.firstName }} {{ nfcResult()?.nfcData?.lastName }}</p>
-        <p><strong>Gender:</strong> {{ nfcResult()?.nfcData?.gender }}</p>
-        <p><strong>Issuing country:</strong> {{ nfcResult()?.nfcData?.issuingCountry }}</p>
-        <p><strong>Chip auth:</strong> {{ nfcResult()?.nfcData?.chipAuthInfo }}</p>
+        <p><strong>Name:</strong>    {{ nfcResult()?.nfcData?.firstName }} {{ nfcResult()?.nfcData?.lastName }}</p>
+        <p><strong>Gender:</strong>  {{ nfcResult()?.nfcData?.gender }}</p>
+        <p><strong>Country:</strong> {{ nfcResult()?.nfcData?.issuingCountry }}</p>
       </ion-card-content>
     </ion-card>
   }
@@ -698,152 +582,81 @@ Uses Angular 17+ `@if` / `@for` control flow (no `*ngIf` / `*ngFor` directives n
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
 | `license` | `string` | ✅ | — | Mitek license key |
-| `documentType` | `DocumentType` | — | `'PASSPORT'` | Document type to capture |
-
-**Returns:** `Promise<SessionResult>`  
-**Requires permission:** `camera`
-
----
+| `documentType` | `DocumentType` | — | `'PASSPORT'` | Document type |
 
 ### `startFaceSession(options)`
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `license` | `string` | ✅ | Mitek license key |
-
-**Returns:** `Promise<SessionResult>`  
-**Requires permission:** `camera`
-
----
+| Parameter | Type | Required |
+|-----------|------|----------|
+| `license` | `string` | ✅ |
 
 ### `startBarcodeSession(options)`
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `license` | `string` | ✅ | Mitek license key |
-
-**Returns:** `Promise<SessionResult>`  
-**Requires permission:** `camera`
-
----
+| Parameter | Type | Required |
+|-----------|------|----------|
+| `license` | `string` | ✅ |
 
 ### `startVoiceSession(options)`
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `license` | `string` | ✅ | Mitek license key |
+| `license` | `string` | ✅ | |
 | `phrase` | `string` | — | Phrase for the user to speak |
-
-**Returns:** `Promise<SessionResult>`  
-**Requires permission:** `audio`
-
----
 
 ### `startNfcSession(options)`
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `license` | `string` | ✅ | Mitek license key |
-| `mrzLine1` | `string` | — | First raw MRZ line (44 chars, TD3) |
-| `mrzLine2` | `string` | — | Second raw MRZ line |
-| `mrzLine3` | `string` | — | Third MRZ line (optional) |
-| `documentNumber` | `string` | — | Document number (9 chars) |
-| `dateOfBirth` | `string` | — | DOB in `YYMMdd` format |
-| `dateOfExpiry` | `string` | — | Expiry in `YYMMdd` format |
-| `country` | `string` | — | 3-letter issuing country code |
-| `documentCode` | `string` | — | 2-letter document type code |
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `license` | `string` | ✅ |
+| `documentNumber` | `string` | Doc number (9 chars) |
+| `dateOfBirth` | `string` | `YYMMdd` format |
+| `dateOfExpiry` | `string` | `YYMMdd` format |
+| `country` | `string` | 3-letter country code |
+| `documentCode` | `string` | 2-letter document type |
+| `mrzLine1` | `string` | Raw MRZ line 1 |
+| `mrzLine2` | `string` | Raw MRZ line 2 |
+| `mrzLine3` | `string` | Raw MRZ line 3 (optional) |
 
-**Returns:** `Promise<SessionResult>`  
-**Requires permission:** `nfc`
-
----
-
-### `checkPermissions()`
-
-**Returns:** `Promise<PermissionStatus>`
-
-```typescript
-interface PermissionStatus {
-  camera: 'granted' | 'denied' | 'prompt';
-  audio:  'granted' | 'denied' | 'prompt';
-  nfc:    'granted' | 'denied' | 'prompt';
-}
-```
-
----
-
-### `requestPermissions(options?)`
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `options.permissions` | `MitekPermissionType[]` | — | Subset to request. Omit for all. |
-
-`MitekPermissionType` values: `'camera'` · `'audio'` · `'nfc'`
-
-**Returns:** `Promise<PermissionStatus>`
-
----
-
-### `SessionResult` shape
+### `SessionResult`
 
 ```typescript
 interface SessionResult {
   success: boolean;
-  sessionType: string;          // "document" | "face" | "barcode" | "nfc" | "voice"
-
-  imageBase64?: string;         // Base64 JPEG — document, face, barcode sessions
-
-  extractedData?: {             // Document sessions
-    firstName?: string;
-    surname?: string;
-    sex?: string;
-    dateOfBirth?: string;       // YYYY-MM-DD
-    dateOfExpiry?: string;      // YYYY-MM-DD
-    nationality?: string;
-    country?: string;
-    documentNumber?: string;
-    documentType?: string;
-    optionalData1?: string;
-    optionalData2?: string;
+  sessionType: string;
+  imageBase64?: string;
+  extractedData?: {
+    firstName?: string; surname?: string; sex?: string;
+    dateOfBirth?: string; dateOfExpiry?: string;
+    nationality?: string; country?: string;
+    documentNumber?: string; documentType?: string;
+    optionalData1?: string; optionalData2?: string;
     rawMrz?: string;
   };
-
-  nfcData?: {                   // NFC sessions
-    chipType?: string;          // "ICAO" | "EU_DL"
+  nfcData?: {
+    chipType?: string;               // "ICAO" | "EU_DL"
     documentNumber?: string;
     documentCode?: string;
-    firstName?: string;
-    lastName?: string;          // note: lastName, not surname
-    gender?: string;            // note: gender, not sex
-    nationality?: string;
-    issuingCountry?: string;    // note: issuingCountry, not country
-    dateOfBirth?: string;
-    dateOfExpiry?: string;
-    dateOfIssue?: string;
-    personalNumber?: string;
+    firstName?: string; lastName?: string;
+    gender?: string;
+    nationality?: string; issuingCountry?: string;
+    dateOfBirth?: string; dateOfExpiry?: string;
+    dateOfIssue?: string; personalNumber?: string;
     placeOfBirth?: string;
     permanentPlaceOfResidence?: string;  // EU_DL only
     faceImageBase64?: string;
-    chipAuthInfo?: string;
-    activeAuthInfo?: string;
+    chipAuthInfo?: string; activeAuthInfo?: string;
     vehicleCategories?: string[];        // EU_DL only
   };
-
-  barcode?: {                   // Barcode and document sessions
+  barcode?: {
     encodedBarcode?: string;
-    type?: string;              // e.g. "PDF417", "QR_CODE"
+    type?: string;
     isVds?: boolean;
   };
-
-  classification?: string;      // e.g. "PASSPORT", "US_DRIVERS_LICENSE_FRONT"
-  licenseExpired?: boolean;
-
-  rts?: string;                 // Encrypted server-auth payload (document, face, barcode)
-  aiBasedRtsBase64?: string;    // AI-based payload — face sessions only (base64)
-
-  voiceSampleCount?: number;    // Voice sessions
-  phrase?: string;              // Voice sessions
-
+  classification?: string;
+  rts?: string;
+  aiBasedRtsBase64?: string;
+  voiceSampleCount?: number;
+  phrase?: string;
   errorCode?: string;
   errorMessage?: string;
 }
@@ -853,41 +666,34 @@ interface SessionResult {
 
 ## Error Codes
 
-| `errorCode` | When it occurs |
-|-------------|----------------|
-| `LICENSE_MISSING` | `license` field not provided in options |
-| `LICENSE_INVALID` | SDK rejected the license key (wrong key, expired, wrong app ID, wrong feature) |
-| `PERMISSION_DENIED` | Required OS permission was not granted |
+| `errorCode` | When |
+|-------------|------|
+| `LICENSE_MISSING` | `license` field not provided |
+| `LICENSE_INVALID` | SDK rejected the license key |
+| `PERMISSION_DENIED` | OS permission not granted |
 | `SESSION_CANCELLED` | User dismissed the capture UI |
-| `CAMERA_ERROR` | Camera hardware unavailable or access blocked |
-| `ANALYSIS_ERROR` | SDK internal frame analysis failure |
+| `CAMERA_ERROR` | Camera hardware unavailable |
+| `ANALYSIS_ERROR` | SDK frame analysis failure |
 | `NFC_ERROR` | NFC chip could not be read |
 | `VOICE_ERROR` | Voice recording failure |
-| `SETTINGS_ERROR` | Invalid session configuration (e.g. unrecognised `documentType`) |
-| `UNIMPLEMENTED` | Feature not yet available on this platform (iOS) |
-| `UNKNOWN_ERROR` | Unexpected SDK or bridge error |
-
-### Error handling pattern
+| `SETTINGS_ERROR` | Invalid session configuration |
+| `UNIMPLEMENTED` | Platform not yet supported (iOS) |
+| `UNKNOWN_ERROR` | Unexpected error |
 
 ```typescript
 const result = await MitekSdk.startDocumentSession({ license: '...', documentType: 'PASSPORT' });
 
 if (!result.success) {
   switch (result.errorCode) {
-    case 'SESSION_CANCELLED':
-      break;
-    case 'LICENSE_MISSING':
+    case 'SESSION_CANCELLED': break;
     case 'LICENSE_INVALID':
-      console.error('Mitek license problem:', result.errorMessage);
+      console.error('Check your Mitek license key and applicationId.');
       break;
     case 'PERMISSION_DENIED':
-      this.showPermissionRationale();
-      break;
-    case 'CAMERA_ERROR':
-      this.showRetryPrompt('Camera unavailable. Please try again.');
+      // guide user to Settings
       break;
     default:
-      console.error('MiSnap error:', result.errorCode, result.errorMessage);
+      console.error(result.errorCode, result.errorMessage);
   }
 }
 ```
@@ -896,69 +702,20 @@ if (!result.success) {
 
 ## Troubleshooting
 
-### `Could not resolve com.miteksystems.misnap:workflow:5.11.1`
+**`Could not resolve com.miteksystems.misnap:workflow:5.11.1`**  
+Gradle cannot reach GitHub Packages. Confirm `mitek.github.username` and `mitek.github.token` are set in `android/local.properties` and the PAT has `read:packages` scope.
 
-Gradle cannot reach the Mitek GitHub Packages repository.
+**`LICENSE_INVALID` at runtime**  
+The license key does not match the app's `applicationId` or the feature is not enabled for that key. Confirm with Mitek.
 
-**Fix:**
-1. Confirm `mitek.github.username` and `mitek.github.token` are set in `android/local.properties`.
-2. Confirm the PAT has `read:packages` scope.
-3. Confirm your GitHub account has been granted access to `mitek-systems/misnap-android`.
+**Session does not start after granting camera permission**  
+Handled automatically — the plugin relaunches the session inside `onCameraPermission`. If it still fails, confirm no other app holds the camera.
 
----
+**NFC session fails immediately**  
+Check that NFC is enabled in device Settings and the document is NFC-enabled (chip icon on the document).
 
-### `LICENSE_INVALID` error at runtime
-
-The license key does not match the app's `applicationId` or the feature is not enabled.
-
-**Fix:**
-1. Open `android/app/build.gradle` and note the `applicationId`.
-2. Confirm with Mitek that your license is provisioned for that exact application ID and the feature you are using.
-
----
-
-### Camera freezes or session does not start after granting permission
-
-On some Android 11+ devices the camera service restarts after a runtime permission grant.
-
-**Fix:** This is handled automatically. The plugin relaunches the session inside `onCameraPermission` after the grant is confirmed. If the issue persists, ensure no other app holds the camera (Android only allows one camera user at a time).
-
----
-
-### NFC session fails immediately with `NFC_ERROR`
-
-**Possible causes:**
-- NFC is disabled in device Settings.
-- Device does not have NFC hardware.
-- The document is not NFC-enabled.
-
-**Fix:** Check NFC availability before starting a session:
-
-```typescript
-import { NFC } from '@awesome-cordova-plugins/nfc/ngx';
-
-// Or check via native intent check
-const perms = await MitekSdk.checkPermissions();
-if (perms.nfc !== 'granted') {
-  // Guide user to enable NFC in Settings
-}
-```
-
----
-
-### Session result has no `extractedData`
-
-The SDK captured the image but OCR did not succeed (poor lighting, glare, partial capture).
-
-**Fix:** Prompt the user to retry with better lighting. The `success: true` flag means the image was captured — extraction is best-effort.
-
----
-
-### `startVoiceSession` returns success but `voiceSampleCount` is 0
-
-The session completed but no audio samples were recorded (user did not speak).
-
-**Fix:** Ensure `RECORD_AUDIO` permission is granted and the device microphone is not blocked by another app.
+**`extractedData` is empty**  
+The image was captured but OCR did not succeed. Prompt the user to retry in better lighting.
 
 ---
 
@@ -967,24 +724,23 @@ The session completed but no audio samples were recorded (user did not speak).
 ```
 plugins/capacitor-mitek-sdk/
 ├── src/
-│   ├── definitions.ts          TypeScript interfaces (SessionResult, options, etc.)
-│   ├── index.ts                Plugin registration + public exports
-│   └── web.ts                  Browser stub (throws unimplemented)
+│   ├── definitions.ts          TypeScript interfaces
+│   ├── index.ts                Plugin registration + exports
+│   └── web.ts                  Browser stub
 ├── android/
-│   ├── build.gradle            SDK Gradle dependencies + Maven repo config
-│   ├── proguard-rules.pro      R8 / ProGuard keep rules
+│   ├── build.gradle            MiSnap SDK Gradle dependencies
+│   ├── proguard-rules.pro
 │   └── src/main/
 │       ├── AndroidManifest.xml
 │       └── java/com/mitek/capacitor/
-│           ├── MitekSdkPlugin.kt   @CapacitorPlugin bridge class
-│           └── MitekSdk.kt         Step builders + result parser
-├── ios/
-│   └── Plugin/
-│       ├── MitekSdkPlugin.m        ObjC CAP_PLUGIN registration
-│       ├── MitekSdkPlugin.swift    iOS bridge stub
-│       └── MitekSdk.swift          iOS helper stub
+│           ├── MitekSdkPlugin.kt   Capacitor bridge — launches MiSnapWorkflowActivity
+│           └── MitekSdk.kt         Builds steps + parses MiSnapFinalResult
+├── ios/Plugin/
+│   ├── MitekSdkPlugin.m
+│   ├── MitekSdkPlugin.swift    (stub)
+│   └── MitekSdk.swift          (stub)
 ├── capacitor-mitek-sdk.podspec
 ├── package.json
-├── tsconfig.json
-└── rollup.config.js
+├── rollup.config.js
+└── tsconfig.json
 ```

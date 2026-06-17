@@ -26,54 +26,40 @@ import com.miteksystems.misnap.workflow.MiSnapWorkflowActivity
 class MitekSdkPlugin : Plugin() {
 
     private companion object {
-        const val TAG = "MitekSdkPlugin"
-        const val KEY_LICENSE      = "license"
-        const val KEY_DOC_TYPE     = "documentType"
-        const val KEY_MRZ_LINE1    = "mrzLine1"
-        const val KEY_MRZ_LINE2    = "mrzLine2"
-        const val KEY_MRZ_LINE3    = "mrzLine3"
-        const val KEY_DOC_NUMBER   = "documentNumber"
-        const val KEY_DOB          = "dateOfBirth"
-        const val KEY_DOE          = "dateOfExpiry"
-        const val KEY_COUNTRY      = "country"
-        const val KEY_DOC_CODE     = "documentCode"
-        const val KEY_PERMISSIONS  = "permissions"
-        const val CB_DOCUMENT      = "onDocumentResult"
-        const val CB_FACE          = "onFaceResult"
-        const val CB_BARCODE       = "onBarcodeResult"
-        const val CB_VOICE         = "onVoiceResult"
-        const val CB_NFC           = "onNfcResult"
-        const val PCB_CAMERA       = "onCameraPermission"
-        const val PCB_AUDIO        = "onAudioPermission"
-        const val PCB_NFC          = "onNfcPermission"
-        const val PCB_ALL          = "onAllPermissions"
+        const val TAG            = "MitekSdkPlugin"
+        const val KEY_LICENSE    = "license"
+        const val KEY_DOC_TYPE   = "documentType"
+        const val KEY_MRZ_LINE1  = "mrzLine1"
+        const val KEY_MRZ_LINE2  = "mrzLine2"
+        const val KEY_MRZ_LINE3  = "mrzLine3"
+        const val KEY_DOC_NUMBER = "documentNumber"
+        const val KEY_DOB        = "dateOfBirth"
+        const val KEY_DOE        = "dateOfExpiry"
+        const val KEY_COUNTRY    = "country"
+        const val KEY_DOC_CODE   = "documentCode"
+        const val KEY_PERMISSIONS = "permissions"
     }
 
     private lateinit var sdk: MitekSdk
 
     override fun load() {
-        Log.i(TAG, "load")
         sdk = MitekSdk(context)
     }
 
     @PluginMethod
     fun startDocumentSession(call: PluginCall) {
-        Log.i(TAG, "startDocumentSession")
         val license = call.getString(KEY_LICENSE)
         if (license.isNullOrBlank()) {
-            Log.e(TAG, "startDocumentSession: missing license")
             call.reject("'license' is required", MitekSdk.ERR_LICENSE_MISSING)
             return
         }
         val useCase = resolveDocumentUseCase(call.getString(KEY_DOC_TYPE))
         if (useCase == null) {
-            Log.e(TAG, "startDocumentSession: unknown documentType=${call.getString(KEY_DOC_TYPE)}")
             call.reject("Unknown documentType. Valid: PASSPORT, ID_FRONT, ID_BACK, CHECK_FRONT, CHECK_BACK, GENERIC_DOCUMENT", MitekSdk.ERR_SETTINGS_ERROR)
             return
         }
         if (getPermissionState("camera") != PermissionState.GRANTED) {
-            Log.d(TAG, "startDocumentSession: requesting camera permission")
-            requestPermissionForAlias("camera", call, PCB_CAMERA)
+            requestPermissionForAlias("camera", call, "onCameraPermission")
             return
         }
         launchDocument(call, license, useCase)
@@ -81,16 +67,13 @@ class MitekSdkPlugin : Plugin() {
 
     @PluginMethod
     fun startFaceSession(call: PluginCall) {
-        Log.i(TAG, "startFaceSession")
         val license = call.getString(KEY_LICENSE)
         if (license.isNullOrBlank()) {
-            Log.e(TAG, "startFaceSession: missing license")
             call.reject("'license' is required", MitekSdk.ERR_LICENSE_MISSING)
             return
         }
         if (getPermissionState("camera") != PermissionState.GRANTED) {
-            Log.d(TAG, "startFaceSession: requesting camera permission")
-            requestPermissionForAlias("camera", call, PCB_CAMERA)
+            requestPermissionForAlias("camera", call, "onCameraPermission")
             return
         }
         launchFace(call, license)
@@ -98,16 +81,13 @@ class MitekSdkPlugin : Plugin() {
 
     @PluginMethod
     fun startBarcodeSession(call: PluginCall) {
-        Log.i(TAG, "startBarcodeSession")
         val license = call.getString(KEY_LICENSE)
         if (license.isNullOrBlank()) {
-            Log.e(TAG, "startBarcodeSession: missing license")
             call.reject("'license' is required", MitekSdk.ERR_LICENSE_MISSING)
             return
         }
         if (getPermissionState("camera") != PermissionState.GRANTED) {
-            Log.d(TAG, "startBarcodeSession: requesting camera permission")
-            requestPermissionForAlias("camera", call, PCB_CAMERA)
+            requestPermissionForAlias("camera", call, "onCameraPermission")
             return
         }
         launchBarcode(call, license)
@@ -115,16 +95,13 @@ class MitekSdkPlugin : Plugin() {
 
     @PluginMethod
     fun startVoiceSession(call: PluginCall) {
-        Log.i(TAG, "startVoiceSession")
         val license = call.getString(KEY_LICENSE)
         if (license.isNullOrBlank()) {
-            Log.e(TAG, "startVoiceSession: missing license")
             call.reject("'license' is required", MitekSdk.ERR_LICENSE_MISSING)
             return
         }
         if (getPermissionState("audio") != PermissionState.GRANTED) {
-            Log.d(TAG, "startVoiceSession: requesting audio permission")
-            requestPermissionForAlias("audio", call, PCB_AUDIO)
+            requestPermissionForAlias("audio", call, "onAudioPermission")
             return
         }
         launchVoice(call, license)
@@ -132,16 +109,13 @@ class MitekSdkPlugin : Plugin() {
 
     @PluginMethod
     fun startNfcSession(call: PluginCall) {
-        Log.i(TAG, "startNfcSession")
         val license = call.getString(KEY_LICENSE)
         if (license.isNullOrBlank()) {
-            Log.e(TAG, "startNfcSession: missing license")
             call.reject("'license' is required", MitekSdk.ERR_LICENSE_MISSING)
             return
         }
         if (getPermissionState("nfc") != PermissionState.GRANTED) {
-            Log.d(TAG, "startNfcSession: requesting NFC permission")
-            requestPermissionForAlias("nfc", call, PCB_NFC)
+            requestPermissionForAlias("nfc", call, "onNfcPermission")
             return
         }
         launchNfc(call, license)
@@ -149,27 +123,23 @@ class MitekSdkPlugin : Plugin() {
 
     @PluginMethod
     fun checkPermissions(call: PluginCall) {
-        Log.d(TAG, "checkPermissions")
         call.resolve(permissionStatus())
     }
 
     @PluginMethod
     fun requestPermissions(call: PluginCall) {
-        Log.d(TAG, "requestPermissions")
         val requested = call.getArray(KEY_PERMISSIONS)?.toList<String>()
         val aliases = if (requested.isNullOrEmpty()) {
             arrayOf("camera", "audio", "nfc")
         } else {
             requested.toTypedArray()
         }
-        requestPermissionForAliases(aliases, call, PCB_ALL)
+        requestPermissionForAliases(aliases, call, "onAllPermissions")
     }
 
     @PermissionCallback
     private fun onCameraPermission(call: PluginCall) {
-        Log.d(TAG, "onCameraPermission state=${getPermissionState("camera")}")
         if (getPermissionState("camera") != PermissionState.GRANTED) {
-            Log.w(TAG, "onCameraPermission: denied")
             call.reject("Camera permission denied", MitekSdk.ERR_PERMISSION_DENIED)
             return
         }
@@ -178,9 +148,7 @@ class MitekSdkPlugin : Plugin() {
 
     @PermissionCallback
     private fun onAudioPermission(call: PluginCall) {
-        Log.d(TAG, "onAudioPermission state=${getPermissionState("audio")}")
         if (getPermissionState("audio") != PermissionState.GRANTED) {
-            Log.w(TAG, "onAudioPermission: denied")
             call.reject("Microphone permission denied", MitekSdk.ERR_PERMISSION_DENIED)
             return
         }
@@ -189,9 +157,7 @@ class MitekSdkPlugin : Plugin() {
 
     @PermissionCallback
     private fun onNfcPermission(call: PluginCall) {
-        Log.d(TAG, "onNfcPermission state=${getPermissionState("nfc")}")
         if (getPermissionState("nfc") != PermissionState.GRANTED) {
-            Log.w(TAG, "onNfcPermission: denied")
             call.reject("NFC permission denied", MitekSdk.ERR_PERMISSION_DENIED)
             return
         }
@@ -200,47 +166,39 @@ class MitekSdkPlugin : Plugin() {
 
     @PermissionCallback
     private fun onAllPermissions(call: PluginCall) {
-        Log.d(TAG, "onAllPermissions")
         call.resolve(permissionStatus())
     }
 
     @ActivityCallback
     private fun onDocumentResult(call: PluginCall, result: ActivityResult) {
-        Log.d(TAG, "onDocumentResult resultCode=${result.resultCode}")
         handleResult(call, "document")
     }
 
     @ActivityCallback
     private fun onFaceResult(call: PluginCall, result: ActivityResult) {
-        Log.d(TAG, "onFaceResult resultCode=${result.resultCode}")
         handleResult(call, "face")
     }
 
     @ActivityCallback
     private fun onBarcodeResult(call: PluginCall, result: ActivityResult) {
-        Log.d(TAG, "onBarcodeResult resultCode=${result.resultCode}")
         handleResult(call, "barcode")
     }
 
     @ActivityCallback
     private fun onVoiceResult(call: PluginCall, result: ActivityResult) {
-        Log.d(TAG, "onVoiceResult resultCode=${result.resultCode}")
         handleResult(call, "voice")
     }
 
     @ActivityCallback
     private fun onNfcResult(call: PluginCall, result: ActivityResult) {
-        Log.d(TAG, "onNfcResult resultCode=${result.resultCode}")
         handleResult(call, "nfc")
     }
 
     private fun reLaunch(call: PluginCall) {
         val method = call.methodName ?: run {
-            Log.e(TAG, "reLaunch: no methodName on call")
             call.reject("Internal error: missing method name", MitekSdk.ERR_UNKNOWN)
             return
         }
-        Log.d(TAG, "reLaunch method=$method")
         val license = call.getString(KEY_LICENSE) ?: run {
             call.reject("'license' is required", MitekSdk.ERR_LICENSE_MISSING)
             return
@@ -254,60 +212,52 @@ class MitekSdkPlugin : Plugin() {
             "startBarcodeSession" -> launchBarcode(call, license)
             "startVoiceSession"   -> launchVoice(call, license)
             "startNfcSession"     -> launchNfc(call, license)
-            else -> {
-                Log.e(TAG, "reLaunch: unknown method $method")
-                call.reject("Unknown session method", MitekSdk.ERR_UNKNOWN)
-            }
+            else -> call.reject("Unknown session method", MitekSdk.ERR_UNKNOWN)
         }
     }
 
     private fun launchDocument(call: PluginCall, license: String, useCase: MiSnapSettings.UseCase) {
         try {
-            Log.d(TAG, "launchDocument useCase=$useCase")
             val step = sdk.buildDocumentStep(license, useCase)
-            startActivityForResult(call, MiSnapWorkflowActivity.buildIntent(context, step), CB_DOCUMENT)
+            startActivityForResult(call, MiSnapWorkflowActivity.buildIntent(context, step), "onDocumentResult")
         } catch (e: Exception) {
-            Log.e(TAG, "launchDocument failed", e)
+            Log.e(TAG, "launchDocument", e)
             call.reject("Failed to start document session: ${e.message}", MitekSdk.ERR_UNKNOWN, e)
         }
     }
 
     private fun launchFace(call: PluginCall, license: String) {
         try {
-            Log.d(TAG, "launchFace")
             val step = sdk.buildFaceStep(license)
-            startActivityForResult(call, MiSnapWorkflowActivity.buildIntent(context, step), CB_FACE)
+            startActivityForResult(call, MiSnapWorkflowActivity.buildIntent(context, step), "onFaceResult")
         } catch (e: Exception) {
-            Log.e(TAG, "launchFace failed", e)
+            Log.e(TAG, "launchFace", e)
             call.reject("Failed to start face session: ${e.message}", MitekSdk.ERR_UNKNOWN, e)
         }
     }
 
     private fun launchBarcode(call: PluginCall, license: String) {
         try {
-            Log.d(TAG, "launchBarcode")
             val step = sdk.buildBarcodeStep(license)
-            startActivityForResult(call, MiSnapWorkflowActivity.buildIntent(context, step), CB_BARCODE)
+            startActivityForResult(call, MiSnapWorkflowActivity.buildIntent(context, step), "onBarcodeResult")
         } catch (e: Exception) {
-            Log.e(TAG, "launchBarcode failed", e)
+            Log.e(TAG, "launchBarcode", e)
             call.reject("Failed to start barcode session: ${e.message}", MitekSdk.ERR_UNKNOWN, e)
         }
     }
 
     private fun launchVoice(call: PluginCall, license: String) {
         try {
-            Log.d(TAG, "launchVoice")
             val step = sdk.buildVoiceStep(license)
-            startActivityForResult(call, MiSnapWorkflowActivity.buildIntent(context, step), CB_VOICE)
+            startActivityForResult(call, MiSnapWorkflowActivity.buildIntent(context, step), "onVoiceResult")
         } catch (e: Exception) {
-            Log.e(TAG, "launchVoice failed", e)
+            Log.e(TAG, "launchVoice", e)
             call.reject("Failed to start voice session: ${e.message}", MitekSdk.ERR_UNKNOWN, e)
         }
     }
 
     private fun launchNfc(call: PluginCall, license: String) {
         try {
-            Log.d(TAG, "launchNfc")
             val step = sdk.buildNfcStep(
                 license        = license,
                 mrzLine1       = call.getString(KEY_MRZ_LINE1),
@@ -319,9 +269,9 @@ class MitekSdkPlugin : Plugin() {
                 country        = call.getString(KEY_COUNTRY),
                 documentCode   = call.getString(KEY_DOC_CODE),
             )
-            startActivityForResult(call, MiSnapWorkflowActivity.buildIntent(context, step), CB_NFC)
+            startActivityForResult(call, MiSnapWorkflowActivity.buildIntent(context, step), "onNfcResult")
         } catch (e: Exception) {
-            Log.e(TAG, "launchNfc failed", e)
+            Log.e(TAG, "launchNfc", e)
             call.reject("Failed to start NFC session: ${e.message}", MitekSdk.ERR_UNKNOWN, e)
         }
     }
@@ -329,10 +279,9 @@ class MitekSdkPlugin : Plugin() {
     private fun handleResult(call: PluginCall, sessionType: String) {
         try {
             val result = sdk.parseResults(sessionType)
-            Log.d(TAG, "handleResult sessionType=$sessionType success=${result.optBoolean("success")}")
             call.resolve(result)
         } catch (e: Exception) {
-            Log.e(TAG, "handleResult error sessionType=$sessionType", e)
+            Log.e(TAG, "handleResult sessionType=$sessionType", e)
             val err = JSObject()
             err.put("success", false)
             err.put("sessionType", sessionType)
@@ -341,7 +290,6 @@ class MitekSdkPlugin : Plugin() {
             call.resolve(err)
         } finally {
             MiSnapWorkflowActivity.Result.clearResults()
-            Log.d(TAG, "handleResult: SDK results cleared")
         }
     }
 
