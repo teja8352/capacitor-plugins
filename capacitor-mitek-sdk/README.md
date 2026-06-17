@@ -36,14 +36,17 @@ Supports identity document capture, biometric face capture, barcode scanning, NF
 
 | Requirement | Version |
 |-------------|---------|
-| Node.js | LTS (18+) |
-| Capacitor | 6.x |
-| Android minSdk | 24 (Android 7.0) |
-| Android compileSdk | 34 |
-| Kotlin | 1.8.10 |
-| Gradle | 8.0 |
-| JDK | 17 |
-| iOS | 14.0+ |
+| Node.js | 20+ |
+| Angular | 17+ |
+| Ionic Framework | 8+ |
+| Capacitor | 8.x |
+| TypeScript | 5.6+ |
+| Android minSdk | 26 (Android 8.0) |
+| Android compileSdk | 35 |
+| Kotlin | 2.0+ |
+| Gradle | 8.7+ |
+| JDK | 21 |
+| iOS | 16.0+ |
 | Mitek MiSnap SDK | 5.11.1 |
 
 ---
@@ -183,68 +186,64 @@ ionic generate service services/mitek
 
 ```typescript
 import { Injectable } from '@angular/core';
-import {
-  MitekSdk,
-  DocumentSessionOptions,
-  FaceSessionOptions,
-  BarcodeSessionOptions,
-  VoiceSessionOptions,
+import type {
   NfcSessionOptions,
   SessionResult,
   PermissionStatus,
   MitekPermissionType,
 } from 'capacitor-mitek-sdk';
+import { MitekSdk } from 'capacitor-mitek-sdk';
 
 @Injectable({ providedIn: 'root' })
 export class MitekService {
 
   private readonly LICENSE = 'YOUR_MITEK_LICENSE_KEY';
 
-  async checkPermissions(): Promise<PermissionStatus> {
+  checkPermissions(): Promise<PermissionStatus> {
     return MitekSdk.checkPermissions();
   }
 
-  async requestPermissions(permissions?: MitekPermissionType[]): Promise<PermissionStatus> {
+  requestPermissions(permissions?: MitekPermissionType[]): Promise<PermissionStatus> {
     return MitekSdk.requestPermissions(permissions ? { permissions } : undefined);
   }
 
-  async capturePassport(): Promise<SessionResult> {
+  capturePassport(): Promise<SessionResult> {
     return MitekSdk.startDocumentSession({ license: this.LICENSE, documentType: 'PASSPORT' });
   }
 
-  async captureIdFront(): Promise<SessionResult> {
+  captureIdFront(): Promise<SessionResult> {
     return MitekSdk.startDocumentSession({ license: this.LICENSE, documentType: 'ID_FRONT' });
   }
 
-  async captureIdBack(): Promise<SessionResult> {
+  captureIdBack(): Promise<SessionResult> {
     return MitekSdk.startDocumentSession({ license: this.LICENSE, documentType: 'ID_BACK' });
   }
 
-  async captureCheckFront(): Promise<SessionResult> {
+  captureCheckFront(): Promise<SessionResult> {
     return MitekSdk.startDocumentSession({ license: this.LICENSE, documentType: 'CHECK_FRONT' });
   }
 
-  async captureCheckBack(): Promise<SessionResult> {
+  captureCheckBack(): Promise<SessionResult> {
     return MitekSdk.startDocumentSession({ license: this.LICENSE, documentType: 'CHECK_BACK' });
   }
 
-  async captureGenericDocument(): Promise<SessionResult> {
+  captureGenericDocument(): Promise<SessionResult> {
     return MitekSdk.startDocumentSession({ license: this.LICENSE, documentType: 'GENERIC_DOCUMENT' });
   }
 
-  async captureFace(): Promise<SessionResult> {
+  captureFace(): Promise<SessionResult> {
     return MitekSdk.startFaceSession({ license: this.LICENSE });
   }
 
-  async scanBarcode(): Promise<SessionResult> {
+  scanBarcode(): Promise<SessionResult> {
     return MitekSdk.startBarcodeSession({ license: this.LICENSE });
   }
 
-  async captureVoice(phrase?: string): Promise<SessionResult> {
+  captureVoice(phrase?: string): Promise<SessionResult> {
     return MitekSdk.startVoiceSession({ license: this.LICENSE, phrase });
   }
 
-  async readNfc(options: Omit<NfcSessionOptions, 'license'>): Promise<SessionResult> {
+  readNfc(options: Omit<NfcSessionOptions, 'license'>): Promise<SessionResult> {
     return MitekSdk.startNfcSession({ license: this.LICENSE, ...options });
   }
 }
@@ -503,36 +502,50 @@ A complete end-to-end KYC flow: passport capture → face capture → NFC readin
 
 ### Angular Component
 
+Uses Angular 17+ signals and `inject()`, Ionic 8 standalone imports.
+
 ```typescript
-import { Component } from '@angular/core';
-import { CommonModule } from '@angular/common';
-import { IonicModule, LoadingController, ToastController } from '@ionic/angular';
+import { Component, signal, inject } from '@angular/core';
+import {
+  IonHeader, IonToolbar, IonTitle, IonContent,
+  IonButton, IonIcon, IonCard, IonCardHeader,
+  IonCardTitle, IonCardSubtitle, IonCardContent,
+  LoadingController, ToastController,
+} from '@ionic/angular/standalone';
+import { addIcons } from 'ionicons';
+import { shieldCheckmarkOutline } from 'ionicons/icons';
 import { MitekService } from '../../services/mitek.service';
-import { SessionResult } from 'capacitor-mitek-sdk';
+import type { SessionResult } from 'capacitor-mitek-sdk';
 
 @Component({
   selector: 'app-kyc',
   standalone: true,
-  imports: [CommonModule, IonicModule],
+  imports: [
+    IonHeader, IonToolbar, IonTitle, IonContent,
+    IonButton, IonIcon, IonCard, IonCardHeader,
+    IonCardTitle, IonCardSubtitle, IonCardContent,
+  ],
   templateUrl: './kyc.page.html',
 })
 export class KycPage {
 
-  documentResult: SessionResult | null = null;
-  faceResult: SessionResult | null = null;
-  nfcResult: SessionResult | null = null;
-  isLoading = false;
+  private readonly mitek = inject(MitekService);
+  private readonly loadingCtrl = inject(LoadingController);
+  private readonly toastCtrl = inject(ToastController);
 
-  constructor(
-    private mitek: MitekService,
-    private loadingCtrl: LoadingController,
-    private toastCtrl: ToastController,
-  ) {}
+  documentResult = signal<SessionResult | null>(null);
+  faceResult = signal<SessionResult | null>(null);
+  nfcResult = signal<SessionResult | null>(null);
+  isLoading = signal(false);
+
+  constructor() {
+    addIcons({ shieldCheckmarkOutline });
+  }
 
   async startKyc() {
     const loader = await this.loadingCtrl.create({ message: 'Preparing…' });
     await loader.present();
-    this.isLoading = true;
+    this.isLoading.set(true);
 
     try {
       const perms = await this.mitek.checkPermissions();
@@ -552,7 +565,7 @@ export class KycPage {
         }
         return;
       }
-      this.documentResult = doc;
+      this.documentResult.set(doc);
       await this.toast('Passport captured.');
 
       loader.message = 'Look directly at the camera…';
@@ -563,7 +576,7 @@ export class KycPage {
         }
         return;
       }
-      this.faceResult = face;
+      this.faceResult.set(face);
       await this.toast('Face captured.');
 
       loader.message = 'Hold your passport near the top of the phone…';
@@ -578,7 +591,7 @@ export class KycPage {
       if (!nfc.success && nfc.errorCode !== 'SESSION_CANCELLED') {
         await this.toast('NFC reading failed: ' + nfc.errorMessage, 'warning');
       }
-      this.nfcResult = nfc.success ? nfc : null;
+      this.nfcResult.set(nfc.success ? nfc : null);
 
       await this.toast('KYC capture complete. Submitting…', 'success');
       await this.submitToServer(doc, face, nfc);
@@ -587,18 +600,12 @@ export class KycPage {
       console.error('[KycPage] unexpected error', err);
       await this.toast('An unexpected error occurred.', 'danger');
     } finally {
-      this.isLoading = false;
+      this.isLoading.set(false);
       await loader.dismiss();
     }
   }
 
-  private async submitToServer(
-    doc: SessionResult,
-    face: SessionResult,
-    nfc: SessionResult,
-  ) {
-    // Send imageBase64, extractedData, rts, and aiBasedRtsBase64 to your backend.
-    // Your backend forwards these to the Mitek API for identity verification.
+  private async submitToServer(doc: SessionResult, face: SessionResult, nfc: SessionResult) {
     console.log('[KycPage] submitting to server:', {
       documentImage: doc.imageBase64?.substring(0, 20) + '…',
       faceImage: face.imageBase64?.substring(0, 20) + '…',
@@ -615,6 +622,8 @@ export class KycPage {
 
 ### Angular Template
 
+Uses Angular 17+ `@if` / `@for` control flow (no `*ngIf` / `*ngFor` directives needed).
+
 ```html
 <ion-header>
   <ion-toolbar>
@@ -624,51 +633,58 @@ export class KycPage {
 
 <ion-content class="ion-padding">
 
-  <ion-button expand="block" (click)="startKyc()" [disabled]="isLoading">
+  <ion-button expand="block" (click)="startKyc()" [disabled]="isLoading()">
     <ion-icon name="shield-checkmark-outline" slot="start"></ion-icon>
     Start KYC
   </ion-button>
 
-  <ion-card *ngIf="documentResult?.success">
-    <ion-card-header>
-      <ion-card-title>Passport</ion-card-title>
-      <ion-card-subtitle>{{ documentResult?.classification }}</ion-card-subtitle>
-    </ion-card-header>
-    <ion-card-content>
-      <img [src]="'data:image/jpeg;base64,' + documentResult?.imageBase64"
-           style="max-width:100%; border-radius:8px;" />
-      <p><strong>Name:</strong> {{ documentResult?.extractedData?.firstName }} {{ documentResult?.extractedData?.surname }}</p>
-      <p><strong>Document #:</strong> {{ documentResult?.extractedData?.documentNumber }}</p>
-      <p><strong>DOB:</strong> {{ documentResult?.extractedData?.dateOfBirth }}</p>
-      <p><strong>Expiry:</strong> {{ documentResult?.extractedData?.dateOfExpiry }}</p>
-      <p><strong>Nationality:</strong> {{ documentResult?.extractedData?.nationality }}</p>
-    </ion-card-content>
-  </ion-card>
+  @if (documentResult()?.success) {
+    <ion-card>
+      <ion-card-header>
+        <ion-card-title>Passport</ion-card-title>
+        <ion-card-subtitle>{{ documentResult()?.classification }}</ion-card-subtitle>
+      </ion-card-header>
+      <ion-card-content>
+        <img [src]="'data:image/jpeg;base64,' + documentResult()?.imageBase64"
+             style="max-width:100%; border-radius:8px;" />
+        <p><strong>Name:</strong> {{ documentResult()?.extractedData?.firstName }} {{ documentResult()?.extractedData?.surname }}</p>
+        <p><strong>Document #:</strong> {{ documentResult()?.extractedData?.documentNumber }}</p>
+        <p><strong>DOB:</strong> {{ documentResult()?.extractedData?.dateOfBirth }}</p>
+        <p><strong>Expiry:</strong> {{ documentResult()?.extractedData?.dateOfExpiry }}</p>
+        <p><strong>Nationality:</strong> {{ documentResult()?.extractedData?.nationality }}</p>
+      </ion-card-content>
+    </ion-card>
+  }
 
-  <ion-card *ngIf="faceResult?.success">
-    <ion-card-header>
-      <ion-card-title>Selfie</ion-card-title>
-    </ion-card-header>
-    <ion-card-content>
-      <img [src]="'data:image/jpeg;base64,' + faceResult?.imageBase64"
-           style="max-width:180px; border-radius:50%; display:block; margin:auto;" />
-    </ion-card-content>
-  </ion-card>
+  @if (faceResult()?.success) {
+    <ion-card>
+      <ion-card-header>
+        <ion-card-title>Selfie</ion-card-title>
+      </ion-card-header>
+      <ion-card-content>
+        <img [src]="'data:image/jpeg;base64,' + faceResult()?.imageBase64"
+             style="max-width:180px; border-radius:50%; display:block; margin:auto;" />
+      </ion-card-content>
+    </ion-card>
+  }
 
-  <ion-card *ngIf="nfcResult?.success">
-    <ion-card-header>
-      <ion-card-title>NFC Chip — {{ nfcResult?.nfcData?.chipType }}</ion-card-title>
-    </ion-card-header>
-    <ion-card-content>
-      <img *ngIf="nfcResult?.nfcData?.faceImageBase64"
-           [src]="'data:image/jpeg;base64,' + nfcResult?.nfcData?.faceImageBase64"
-           style="max-width:120px; border-radius:50%; display:block; margin:auto 0 12px;" />
-      <p><strong>Name:</strong> {{ nfcResult?.nfcData?.firstName }} {{ nfcResult?.nfcData?.lastName }}</p>
-      <p><strong>Gender:</strong> {{ nfcResult?.nfcData?.gender }}</p>
-      <p><strong>Issuing country:</strong> {{ nfcResult?.nfcData?.issuingCountry }}</p>
-      <p><strong>Chip auth:</strong> {{ nfcResult?.nfcData?.chipAuthInfo }}</p>
-    </ion-card-content>
-  </ion-card>
+  @if (nfcResult()?.success) {
+    <ion-card>
+      <ion-card-header>
+        <ion-card-title>NFC Chip — {{ nfcResult()?.nfcData?.chipType }}</ion-card-title>
+      </ion-card-header>
+      <ion-card-content>
+        @if (nfcResult()?.nfcData?.faceImageBase64) {
+          <img [src]="'data:image/jpeg;base64,' + nfcResult()!.nfcData!.faceImageBase64"
+               style="max-width:120px; border-radius:50%; display:block; margin:auto 0 12px;" />
+        }
+        <p><strong>Name:</strong> {{ nfcResult()?.nfcData?.firstName }} {{ nfcResult()?.nfcData?.lastName }}</p>
+        <p><strong>Gender:</strong> {{ nfcResult()?.nfcData?.gender }}</p>
+        <p><strong>Issuing country:</strong> {{ nfcResult()?.nfcData?.issuingCountry }}</p>
+        <p><strong>Chip auth:</strong> {{ nfcResult()?.nfcData?.chipAuthInfo }}</p>
+      </ion-card-content>
+    </ion-card>
+  }
 
 </ion-content>
 ```

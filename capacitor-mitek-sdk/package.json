@@ -19,21 +19,24 @@
     "ios/",
     "capacitor-mitek-sdk.podspec"
   ],
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "scripts": {
     "build": "npm run clean && tsc && rollup -c rollup.config.js",
     "clean": "rimraf ./dist"
   },
   "devDependencies": {
-    "@capacitor/android": "^6.0.0",
-    "@capacitor/core": "^6.0.0",
-    "@capacitor/ios": "^6.0.0",
-    "@rollup/plugin-typescript": "^11.1.5",
-    "rimraf": "^5.0.5",
-    "rollup": "^4.4.0",
-    "typescript": "^5.2.2"
+    "@capacitor/android": "^8.0.0",
+    "@capacitor/core": "^8.0.0",
+    "@capacitor/ios": "^8.0.0",
+    "@rollup/plugin-typescript": "^11.1.6",
+    "rimraf": "^5.0.10",
+    "rollup": "^4.24.0",
+    "typescript": "^5.6.0"
   },
   "peerDependencies": {
-    "@capacitor/core": "^6.0.0"
+    "@capacitor/core": "^8.0.0"
   },
   "capacitor": {
     "ios": {

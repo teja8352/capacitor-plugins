@@ -3,11 +3,11 @@ apply plugin: 'kotlin-android'
 
 android {
     namespace "com.mitek.capacitor"
-    compileSdk project.hasProperty('compileSdkVersion') ? rootProject.ext.compileSdkVersion : 34
+    compileSdk project.hasProperty('compileSdkVersion') ? rootProject.ext.compileSdkVersion : 35
 
     defaultConfig {
-        minSdk project.hasProperty('minSdkVersion') ? rootProject.ext.minSdkVersion : 24
-        targetSdk project.hasProperty('targetSdkVersion') ? rootProject.ext.targetSdkVersion : 34
+        minSdk project.hasProperty('minSdkVersion') ? rootProject.ext.minSdkVersion : 26
+        targetSdk project.hasProperty('targetSdkVersion') ? rootProject.ext.targetSdkVersion : 35
     }
 
     buildTypes {
@@ -22,12 +22,12 @@ android {
     }
 
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_17
-        targetCompatibility JavaVersion.VERSION_17
+        sourceCompatibility JavaVersion.VERSION_21
+        targetCompatibility JavaVersion.VERSION_21
     }
 
     kotlinOptions {
-        jvmTarget = '17'
+        jvmTarget = '21'
     }
 }
 
