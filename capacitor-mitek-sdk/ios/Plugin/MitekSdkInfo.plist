@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Merge these keys into your app's Info.plist.
+  Required keys vary by session type — include only what you use.
+-->
+<plist version="1.0">
+<dict>
+
+    <!-- ── Document / Face / Barcode (camera) ─────────────────────────── -->
+    <key>NSCameraUsageDescription</key>
+    <string>Camera access is required to capture identity documents and selfies.</string>
+
+    <!-- ── Voice capture ──────────────────────────────────────────────── -->
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Microphone access is required to record voice samples for identity verification.</string>
+
+    <!-- ── NFC passport / ID reading ──────────────────────────────────── -->
+    <key>NFCReaderUsageDescription</key>
+    <string>NFC access is required to read the chip embedded in your identity document.</string>
+
+    <!--
+      ISO 7816 application identifiers required for NFC passport reading.
+      Both tags must be present for MiSnapNFC to work correctly.
+    -->
+    <key>com.apple.developer.nfc.readersession.iso7816.select-identifiers</key>
+    <array>
+        <!-- ICAO eMRTD application identifier (passports, national IDs) -->
+        <string>A0000002471001</string>
+        <!-- EU driving licence application identifier -->
+        <string>A00000045645444C2D3031</string>
+    </array>
+
+</dict>
+</plist>

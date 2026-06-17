@@ -8,10 +8,20 @@ Pod::Spec.new do |s|
   s.summary          = package['description']
   s.license          = package['license'] || 'MIT'
   s.homepage         = 'https://github.com'
-  s.author           = package['author'] || {}
+  s.author           = package['author'] || { 'Mitek' => 'support@miteksystems.com' }
   s.source           = { :git => '', :tag => s.version.to_s }
   s.source_files     = 'ios/Plugin/**/*.{swift,h,m,c,cc,mm,cpp}'
   s.ios.deployment_target = '16.0'
-  s.dependency 'Capacitor'
   s.swift_version    = '5.9'
+
+  s.dependency 'Capacitor'
+  s.dependency 'MiSnapCore'
+  s.dependency 'MiSnap'
+  s.dependency 'MiSnapUX'
+  s.dependency 'MiSnapFacialCapture'
+  s.dependency 'MiSnapFacialCaptureUX'
+  s.dependency 'MiSnapVoiceCapture'
+  s.dependency 'MiSnapVoiceCaptureUX'
+  s.dependency 'MiSnapNFC'
+  s.dependency 'MiSnapNFCUX'
 end
